@@ -8,7 +8,7 @@
    git switch develop
    python3 -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
    pip install -r requirements-dev.txt
-   cp .env.example .env
+   vi .env # creer un fichier nomme .env et placer le text dev dedant.
    flask --app wsgi run --debug
    python -m pytest
    ```
