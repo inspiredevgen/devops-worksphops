@@ -28,6 +28,14 @@ rand() { python3 -c 'import secrets; print(secrets.token_hex(6))'; }
 MYSQL_ROOT_PASSWORD="${MYSQL_ROOT_PASSWORD:-Root#$(rand)Aa9}"
 DB_APP_PASSWORD="${DB_APP_PASSWORD:-App#$(rand)Aa9}"
 
+# Save the passwords BEFORE changing anything, so an interrupted run resumes with the same ones
+( umask 077
+  cat > "$CRED_FILE" <<EOF
+MYSQL_ROOT_PASSWORD='${MYSQL_ROOT_PASSWORD}'
+DB_APP_PASSWORD='${DB_APP_PASSWORD}'
+EOF
+)
+
 # ---------------------------------------------------------------------------
 log "1/6 Checking outbound internet access (via the NAT Gateway)"
 if EGRESS_IP=$(curl -s --max-time 5 https://checkip.amazonaws.com); then
@@ -79,16 +87,22 @@ if [[ "$ENGINE" == "mysql" ]]; then
   else
     TMP_PW=$(grep 'temporary password' /var/log/mysqld.log | tail -1 | awk '{print $NF}')
     [[ -n "$TMP_PW" ]] || { echo "Cannot find the temporary root password in /var/log/mysqld.log"; exit 1; }
-    mysql -uroot -p"${TMP_PW}" --connect-expired-password \
-      -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '${MYSQL_ROOT_PASSWORD}';"
+    if ! mysql -uroot -p"${TMP_PW}" --connect-expired-password \
+         -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '${MYSQL_ROOT_PASSWORD}';"; then
+      echo "Could not log in as root with the saved or the temporary password."
+      echo "The root password was probably changed by an earlier run. See Part 12 (troubleshooting)."
+      exit 1
+    fi
     echo "Temporary root password replaced."
   fi
-  cat > /root/.my.cnf <<EOF
+  # Quote the password: in MySQL option files an unquoted '#' starts a comment
+  ( umask 077
+    cat > /root/.my.cnf <<EOF
 [client]
 user=root
-password=${MYSQL_ROOT_PASSWORD}
+password="${MYSQL_ROOT_PASSWORD}"
 EOF
-  chmod 600 /root/.my.cnf
+  )
 else
   echo "MariaDB root uses unix_socket authentication (sudo mysql). No password needed."
 fi
@@ -112,13 +126,6 @@ SQL
 
 log "   Seeding sample data from seed.sql"
 sql "${DB_NAME}" < "$SEED_FILE"
-
-# Save credentials for re-runs (root-only file)
-cat > "$CRED_FILE" <<EOF
-MYSQL_ROOT_PASSWORD='${MYSQL_ROOT_PASSWORD}'
-DB_APP_PASSWORD='${DB_APP_PASSWORD}'
-EOF
-chmod 600 "$CRED_FILE"
 
 # ---------------------------------------------------------------------------
 log "6/6 Verifying"
