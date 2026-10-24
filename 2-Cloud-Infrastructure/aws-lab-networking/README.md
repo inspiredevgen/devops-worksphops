@@ -9,7 +9,7 @@
 
 ## Scenario
 
-*Pacific Learning Co.* is launching its student-registration portal on AWS. As the new Cloud Engineer, you must build the network from scratch, following the company's security standards:
+_Pacific Learning Co._ is launching its student-registration portal on AWS. As the new Cloud Engineer, you must build the network from scratch, following the company's security standards:
 
 - No server is administered directly from the internet — **all SSH goes through a bastion host**.
 - The **database must never have a public IP** and must be reachable **only from the web tier**.
@@ -23,7 +23,7 @@
 By the end of this lab you will be able to:
 
 1. Plan a VPC IP addressing scheme and carve it into subnets across Availability Zones
-2. Explain what makes a subnet *public*, *private*, or a *bastion* subnet (hint: route tables, not names)
+2. Explain what makes a subnet _public_, _private_, or a _bastion_ subnet (hint: route tables, not names)
 3. Attach an Internet Gateway and route public subnets through it
 4. Deploy a NAT Gateway and give private subnets outbound-only internet access
 5. Design **security-group chaining** (bastion → servers, web → database)
@@ -95,12 +95,12 @@ This diagram shows everything you will build: region, VPC, Availability Zones, s
 
 **Legend: the four traffic paths you will test**
 
-| Path | Flow |
-|------|------|
-| 🔐 Admin | Laptop → IGW → `lab-bastion` (SSH 22) → ProxyJump → `lab-frontend` / `lab-backend` (SSH 22, private IPs) |
-| 🌐 Web | Browser → IGW → `lab-frontend` (HTTP 80) → `lab-backend` (MySQL 3306) |
-| 📦 Patch / packages | `lab-backend` → `lab-private-rt` → `lab-nat` (public-a) → IGW → internet (repo.mysql.com, dnf repos) |
-| 🚫 Blocked | Internet → `lab-backend` (no public IP, no route) · Bastion → MySQL 3306 (not allowed by `lab-backend-sg`) |
+| Path                | Flow                                                                                                       |
+| ------------------- | ---------------------------------------------------------------------------------------------------------- |
+| 🔐 Admin            | Laptop → IGW → `lab-bastion` (SSH 22) → ProxyJump → `lab-frontend` / `lab-backend` (SSH 22, private IPs)   |
+| 🌐 Web              | Browser → IGW → `lab-frontend` (HTTP 80) → `lab-backend` (MySQL 3306)                                      |
+| 📦 Patch / packages | `lab-backend` → `lab-private-rt` → `lab-nat` (public-a) → IGW → internet (repo.mysql.com, dnf repos)       |
+| 🚫 Blocked          | Internet → `lab-backend` (no public IP, no route) · Bastion → MySQL 3306 (not allowed by `lab-backend-sg`) |
 
 ### 1.1 Architecture diagram (Mermaid)
 
@@ -141,34 +141,34 @@ flowchart TB
 
 ### 1.2 IP addressing plan
 
-| Name | Type | CIDR | AZ | Usable IPs | Purpose |
-|------|------|------|----|-----------|---------|
-| `lab-vpc` | VPC | `10.10.0.0/16` | — | 65,536 total | The whole network |
-| `lab-bastion-subnet` | Public (bastion) | `10.10.0.0/28` | AZ 1 | **11** | Bastion host only — deliberately tiny |
-| `lab-public-a` | Public | `10.10.1.0/24` | AZ 1 | 251 | Front-end server, NAT Gateway |
-| `lab-public-b` | Public | `10.10.2.0/24` | AZ 2 | 251 | Reserved for a second web server / ALB (extension) |
-| `lab-private-a` | Private | `10.10.11.0/24` | AZ 1 | 251 | MySQL back-end |
-| `lab-private-b` | Private | `10.10.12.0/24` | AZ 2 | 251 | Reserved for DB standby / RDS subnet group (extension) |
+| Name                 | Type             | CIDR            | AZ   | Usable IPs   | Purpose                                                |
+| -------------------- | ---------------- | --------------- | ---- | ------------ | ------------------------------------------------------ |
+| `lab-vpc`            | VPC              | `10.10.0.0/16`  | —    | 65,536 total | The whole network                                      |
+| `lab-bastion-subnet` | Public (bastion) | `10.10.0.0/28`  | AZ 1 | **11**       | Bastion host only — deliberately tiny                  |
+| `lab-public-a`       | Public           | `10.10.1.0/24`  | AZ 1 | 251          | Front-end server, NAT Gateway                          |
+| `lab-public-b`       | Public           | `10.10.2.0/24`  | AZ 2 | 251          | Reserved for a second web server / ALB (extension)     |
+| `lab-private-a`      | Private          | `10.10.11.0/24` | AZ 1 | 251          | MySQL back-end                                         |
+| `lab-private-b`      | Private          | `10.10.12.0/24` | AZ 2 | 251          | Reserved for DB standby / RDS subnet group (extension) |
 
 > 🧮 **Why 11 usable IPs in a /28?** A /28 has 16 addresses, and AWS reserves 5 in every subnet: network address, VPC router (+1), DNS (+2), future use (+3), and broadcast (last). 16 − 5 = **11**.
 
 ### 1.3 Routing plan
 
-| Route table | Associated subnets | Routes |
-|-------------|--------------------|--------|
-| `lab-public-rt` | `lab-bastion-subnet`, `lab-public-a`, `lab-public-b` | `10.10.0.0/16 → local` · `0.0.0.0/0 → lab-igw` |
-| `lab-private-rt` | `lab-private-a`, `lab-private-b` | `10.10.0.0/16 → local` · `0.0.0.0/0 → lab-nat` |
-| Main (default) | *(none — left unused on purpose)* | `10.10.0.0/16 → local` only |
+| Route table      | Associated subnets                                   | Routes                                         |
+| ---------------- | ---------------------------------------------------- | ---------------------------------------------- |
+| `lab-public-rt`  | `lab-bastion-subnet`, `lab-public-a`, `lab-public-b` | `10.10.0.0/16 → local` · `0.0.0.0/0 → lab-igw` |
+| `lab-private-rt` | `lab-private-a`, `lab-private-b`                     | `10.10.0.0/16 → local` · `0.0.0.0/0 → lab-nat` |
+| Main (default)   | _(none — left unused on purpose)_                    | `10.10.0.0/16 → local` only                    |
 
 ### 1.4 Security group plan (security-group chaining)
 
-| Security group | Inbound rule | Source | Why |
-|----------------|--------------|--------|-----|
-| `lab-bastion-sg` | SSH 22 | **My IP** (`x.x.x.x/32`) | Only you can reach the bastion |
-| `lab-frontend-sg` | HTTP 80 | `0.0.0.0/0` | Public website |
-| `lab-frontend-sg` | SSH 22 | **`lab-bastion-sg`** | Admin only through the bastion |
-| `lab-backend-sg` | MySQL/Aurora 3306 | **`lab-frontend-sg`** | Only the web tier can query the DB |
-| `lab-backend-sg` | SSH 22 | **`lab-bastion-sg`** | Admin only through the bastion |
+| Security group    | Inbound rule      | Source                   | Why                                |
+| ----------------- | ----------------- | ------------------------ | ---------------------------------- |
+| `lab-bastion-sg`  | SSH 22            | **My IP** (`x.x.x.x/32`) | Only you can reach the bastion     |
+| `lab-frontend-sg` | HTTP 80           | `0.0.0.0/0`              | Public website                     |
+| `lab-frontend-sg` | SSH 22            | **`lab-bastion-sg`**     | Admin only through the bastion     |
+| `lab-backend-sg`  | MySQL/Aurora 3306 | **`lab-frontend-sg`**    | Only the web tier can query the DB |
+| `lab-backend-sg`  | SSH 22            | **`lab-bastion-sg`**     | Admin only through the bastion     |
 
 All three groups keep the default outbound rule (all traffic allowed). Security groups are **stateful**, so return traffic is allowed automatically.
 
@@ -210,16 +210,16 @@ sequenceDiagram
 - An AWS account with permission to create VPC and EC2 resources (avoid the root user)
 - An **SSH client**: macOS/Linux Terminal, or Windows 10/11 PowerShell (OpenSSH is built in)
 - A text editor to save the lab files (VS Code recommended)
-- *(Recommended)* An AWS Budget alert at US$10
+- _(Recommended)_ An AWS Budget alert at US$10
 
 ### 2.1 Cost of this lab (approximate, us-west-1 — check AWS Pricing for current rates)
 
-| Resource | Approx. hourly cost |
-|----------|--------------------|
-| NAT Gateway | ~$0.05 per hour, plus ~$0.05 per GB processed |
-| 3 public IPv4 addresses (bastion, front-end, NAT EIP) | ~$0.005 per hour each |
-| 2 × t3.micro + 1 × t3.small | ~$0.06 per hour |
-| EBS gp3 (3 × 8 GB) | cents per day |
+| Resource                                              | Approx. hourly cost                           |
+| ----------------------------------------------------- | --------------------------------------------- |
+| NAT Gateway                                           | ~$0.05 per hour, plus ~$0.05 per GB processed |
+| 3 public IPv4 addresses (bastion, front-end, NAT EIP) | ~$0.005 per hour each                         |
+| 2 × t3.micro + 1 × t3.small                           | ~$0.06 per hour                               |
+| EBS gp3 (3 × 8 GB)                                    | cents per day                                 |
 
 > ⚠️ The **NAT Gateway bills every hour, even when idle**. If you pause the lab overnight, delete it (Part 15) and recreate it the next day.
 
@@ -227,17 +227,17 @@ sequenceDiagram
 
 Copy this table into your notes and fill it in as you go. You will need these values later.
 
-| Item | Value |
-|------|-------|
-| AZ 1 name (e.g. `us-west-1b`) | |
-| AZ 2 name (e.g. `us-west-1c`) | |
-| VPC ID | |
-| NAT Gateway Elastic IP | |
-| Bastion **public** IP | |
-| Front-end **public** IP | |
-| Front-end **private** IP | |
-| Back-end **private** IP | |
-| MySQL `appuser` password (printed in Part 9) | |
+| Item                                         | Value |
+| -------------------------------------------- | ----- |
+| AZ 1 name (e.g. `us-west-1b`)                |       |
+| AZ 2 name (e.g. `us-west-1c`)                |       |
+| VPC ID                                       |       |
+| NAT Gateway Elastic IP                       |       |
+| Bastion **public** IP                        |       |
+| Front-end **public** IP                      |       |
+| Front-end **private** IP                     |       |
+| Back-end **private** IP                      |       |
+| MySQL `appuser` password (printed in Part 9) |       |
 
 ---
 
@@ -283,9 +283,9 @@ aws-net-lab/
 4. Click **Create VPC**.
 5. With `lab-vpc` selected: **Actions → Edit VPC settings** → tick **Enable DNS hostnames** (DNS resolution should already be enabled) → **Save**.
 
-✅ **Checkpoint:** `lab-vpc` shows state *Available* and CIDR `10.10.0.0/16`. Record the VPC ID.
+✅ **Checkpoint:** `lab-vpc` shows state _Available_ and CIDR `10.10.0.0/16`. Record the VPC ID.
 
-> 🧠 **Discuss:** look at the **Route tables** page. AWS already created a *main route table* for `lab-vpc` containing only the `local` route. Every subnet uses it unless you associate the subnet with another table.
+> 🧠 **Discuss:** look at the **Route tables** page. AWS already created a _main route table_ for `lab-vpc` containing only the `local` route. Every subnet uses it unless you associate the subnet with another table.
 
 ---
 
@@ -295,13 +295,13 @@ aws-net-lab/
 2. **VPC ID:** `lab-vpc`.
 3. Fill in the first subnet, then click **Add new subnet** for each of the others, so all five are created in one go:
 
-| Subnet name | Availability Zone | IPv4 subnet CIDR block |
-|-------------|------------------|------------------------|
-| `lab-bastion-subnet` | AZ 1 | `10.10.0.0/28` |
-| `lab-public-a` | AZ 1 | `10.10.1.0/24` |
-| `lab-public-b` | AZ 2 | `10.10.2.0/24` |
-| `lab-private-a` | AZ 1 | `10.10.11.0/24` |
-| `lab-private-b` | AZ 2 | `10.10.12.0/24` |
+| Subnet name          | Availability Zone | IPv4 subnet CIDR block |
+| -------------------- | ----------------- | ---------------------- |
+| `lab-bastion-subnet` | AZ 1              | `10.10.0.0/28`         |
+| `lab-public-a`       | AZ 1              | `10.10.1.0/24`         |
+| `lab-public-b`       | AZ 2              | `10.10.2.0/24`         |
+| `lab-private-a`      | AZ 1              | `10.10.11.0/24`        |
+| `lab-private-b`      | AZ 2              | `10.10.12.0/24`        |
 
 4. Click **Create subnet**.
 5. Enable automatic public IPv4 on the **three public-facing subnets only**. For each of `lab-bastion-subnet`, `lab-public-a` and `lab-public-b`: select it → **Actions → Edit subnet settings** → tick **Enable auto-assign public IPv4 address** → **Save**.
@@ -317,7 +317,7 @@ aws-net-lab/
 ### 4.1 Create and attach the Internet Gateway
 
 1. **VPC → Internet gateways → Create internet gateway** → Name: `lab-igw` → **Create**.
-2. The new IGW is *Detached*. Click **Actions → Attach to VPC** → select `lab-vpc` → **Attach internet gateway**.
+2. The new IGW is _Detached_. Click **Actions → Attach to VPC** → select `lab-vpc` → **Attach internet gateway**.
 
 > 🧠 An IGW attaches to the **VPC**, not to a subnet. A subnet becomes public when its **route table** has a route `0.0.0.0/0 → IGW`, which is what you configure next.
 
@@ -341,7 +341,7 @@ aws-net-lab/
    - Name: `lab-nat`
    - **Subnet:** `lab-public-a` ← ⚠️ the NAT must live in a **public** subnet
    - **Connectivity type:** Public
-   - *(If the console shows an availability-mode option, choose **Zonal** for this lab.)*
+   - _(If the console shows an availability-mode option, choose **Zonal** for this lab.)_
    - **Elastic IP allocation ID:** click **Allocate Elastic IP**
 2. Click **Create NAT gateway**. Wait until the state is **Available** (1–3 minutes).
 3. Record the NAT's Elastic IP in your worksheet.
@@ -351,15 +351,15 @@ aws-net-lab/
 1. **Route tables → Create route table** → Name: `lab-private-rt` · VPC: `lab-vpc` → **Create**.
 2. **Routes → Edit routes → Add route**: Destination `0.0.0.0/0` → Target **NAT Gateway** → `lab-nat` → **Save**.
 3. **Subnet associations → Edit** → tick **`lab-private-a`, `lab-private-b`** → **Save**.
-4. *(Housekeeping)* Find the VPC's **main** route table (Main = Yes, no explicit associations) and rename it `lab-main-unused`. Leave it with only the `local` route. Any subnet you forget to associate will then be isolated, which is the safe default.
+4. _(Housekeeping)_ Find the VPC's **main** route table (Main = Yes, no explicit associations) and rename it `lab-main-unused`. Leave it with only the `local` route. Any subnet you forget to associate will then be isolated, which is the safe default.
 
 ✅ **Checkpoint:**
 
-| Route table | Routes | Associations |
-|-------------|--------|--------------|
-| `lab-public-rt` | local, `0.0.0.0/0 → igw` | bastion, public-a, public-b |
-| `lab-private-rt` | local, `0.0.0.0/0 → nat` | private-a, private-b |
-| `lab-main-unused` | local | none |
+| Route table       | Routes                   | Associations                |
+| ----------------- | ------------------------ | --------------------------- |
+| `lab-public-rt`   | local, `0.0.0.0/0 → igw` | bastion, public-a, public-b |
+| `lab-private-rt`  | local, `0.0.0.0/0 → nat` | private-a, private-b        |
+| `lab-main-unused` | local                    | none                        |
 
 > 🧠 **Discuss:** in production you would create **one NAT Gateway per AZ** and a private route table per AZ, because a NAT Gateway is only redundant inside its own AZ. We use one NAT here to keep costs down. Extension Challenge B covers the HA design.
 
@@ -370,6 +370,7 @@ aws-net-lab/
 Open **VPC → Security groups** (or **EC2 → Security Groups**). Create the groups **in this order**, because later groups reference earlier ones.
 
 ### 6.1 `lab-bastion-sg`
+
 - **Name:** `lab-bastion-sg` · **Description:** `SSH from admin IP only` · **VPC:** `lab-vpc`
 - **Inbound:** Type **SSH**, Source **My IP**
 - **Outbound:** leave the default (All traffic)
@@ -377,12 +378,14 @@ Open **VPC → Security groups** (or **EC2 → Security Groups**). Create the gr
 > If your IP changes (home vs campus), edit this rule. If you use a corporate VPN, "My IP" is the VPN's egress IP.
 
 ### 6.2 `lab-frontend-sg`
+
 - **Name:** `lab-frontend-sg` · **Description:** `Web tier` · **VPC:** `lab-vpc`
 - **Inbound:**
   - Type **HTTP**, Source **Anywhere-IPv4** (`0.0.0.0/0`)
   - Type **SSH**, Source **Custom** → start typing `lab-bastion-sg` and select the security group
 
 ### 6.3 `lab-backend-sg`
+
 - **Name:** `lab-backend-sg` · **Description:** `Database tier` · **VPC:** `lab-vpc`
 - **Inbound:**
   - Type **MYSQL/Aurora** (TCP 3306), Source **Custom** → `lab-frontend-sg`
@@ -390,7 +393,7 @@ Open **VPC → Security groups** (or **EC2 → Security Groups**). Create the gr
 
 ✅ **Checkpoint:** in `lab-backend-sg`, the sources are **security group IDs (`sg-…`)**, not CIDR blocks.
 
-> 🧠 **Why reference a security group instead of a CIDR?** The rule then follows the *role* of the instance, not its IP address. If you add a second web server in `lab-public-b` and attach `lab-frontend-sg`, it can reach the database automatically, without editing any rule.
+> 🧠 **Why reference a security group instead of a CIDR?** The rule then follows the _role_ of the instance, not its IP address. If you add a second web server in `lab-public-b` and attach `lab-frontend-sg`, it can reach the database automatically, without editing any rule.
 
 ---
 
@@ -403,12 +406,14 @@ Open **VPC → Security groups** (or **EC2 → Security Groups**). Create the gr
 2. The file downloads automatically. Move it into your SSH folder and restrict its permissions:
 
 **macOS / Linux**
+
 ```bash
 mkdir -p ~/.ssh && mv ~/Downloads/lab-net-key.pem ~/.ssh/
 chmod 400 ~/.ssh/lab-net-key.pem
 ```
 
 **Windows PowerShell**
+
 ```powershell
 New-Item -ItemType Directory -Force "$env:USERPROFILE\.ssh" | Out-Null
 Move-Item "$env:USERPROFILE\Downloads\lab-net-key.pem" "$env:USERPROFILE\.ssh\"
@@ -419,21 +424,22 @@ icacls "$env:USERPROFILE\.ssh\lab-net-key.pem" /inheritance:r /grant:r "$($env:U
 
 Use **EC2 → Instances → Launch instances** three times with the settings below. In **Network settings**, click **Edit** to choose the VPC, subnet and security group.
 
-| Setting | `lab-bastion` | `lab-backend` | `lab-frontend` |
-|---------|---------------|---------------|----------------|
-| AMI | Amazon Linux 2023 (64-bit x86) | Amazon Linux 2023 (64-bit x86) | Amazon Linux 2023 (64-bit x86) |
-| Instance type | `t3.micro` | **`t3.small`** (MySQL needs ~1 GB RAM free) | `t3.micro` |
-| Key pair | `lab-net-key` | `lab-net-key` | `lab-net-key` |
-| VPC | `lab-vpc` | `lab-vpc` | `lab-vpc` |
-| Subnet | `lab-bastion-subnet` | **`lab-private-a`** | `lab-public-a` |
-| Auto-assign public IP | **Enable** | **Disable** | **Enable** |
-| Security group (select existing) | `lab-bastion-sg` | `lab-backend-sg` | `lab-frontend-sg` |
-| Storage | 8 GiB gp3 | 10 GiB gp3 | 8 GiB gp3 |
-| Advanced → Metadata version | V2 only (token required) | V2 only | V2 only |
+| Setting                          | `lab-bastion`                  | `lab-backend`                               | `lab-frontend`                 |
+| -------------------------------- | ------------------------------ | ------------------------------------------- | ------------------------------ |
+| AMI                              | Amazon Linux 2023 (64-bit x86) | Amazon Linux 2023 (64-bit x86)              | Amazon Linux 2023 (64-bit x86) |
+| Instance type                    | `t3.micro`                     | **`t3.small`** (MySQL needs ~1 GB RAM free) | `t3.micro`                     |
+| Key pair                         | `lab-net-key`                  | `lab-net-key`                               | `lab-net-key`                  |
+| VPC                              | `lab-vpc`                      | `lab-vpc`                                   | `lab-vpc`                      |
+| Subnet                           | `lab-bastion-subnet`           | **`lab-private-a`**                         | `lab-public-a`                 |
+| Auto-assign public IP            | **Enable**                     | **Disable**                                 | **Enable**                     |
+| Security group (select existing) | `lab-bastion-sg`               | `lab-backend-sg`                            | `lab-frontend-sg`              |
+| Storage                          | 8 GiB gp3                      | 10 GiB gp3                                  | 8 GiB gp3                      |
+| Advanced → Metadata version      | V2 only (token required)       | V2 only                                     | V2 only                        |
 
 > Launch **`lab-backend` before `lab-frontend`** so the database is ready first.
 
-✅ **Checkpoint:** all three instances are *Running* with **2/2 status checks passed**. Fill in the worksheet:
+✅ **Checkpoint:** all three instances are _Running_ with **2/2 status checks passed**. Fill in the worksheet:
+
 - Bastion → public IPv4
 - Front-end → public **and** private IPv4
 - Back-end → private IPv4 (it has **no** public IP, which is correct)
@@ -533,6 +539,14 @@ rand() { python3 -c 'import secrets; print(secrets.token_hex(6))'; }
 MYSQL_ROOT_PASSWORD="${MYSQL_ROOT_PASSWORD:-Root#$(rand)Aa9}"
 DB_APP_PASSWORD="${DB_APP_PASSWORD:-App#$(rand)Aa9}"
 
+# Save the passwords BEFORE changing anything, so an interrupted run resumes with the same ones
+( umask 077
+  cat > "$CRED_FILE" <<EOF
+MYSQL_ROOT_PASSWORD='${MYSQL_ROOT_PASSWORD}'
+DB_APP_PASSWORD='${DB_APP_PASSWORD}'
+EOF
+)
+
 # ---------------------------------------------------------------------------
 log "1/6 Checking outbound internet access (via the NAT Gateway)"
 if EGRESS_IP=$(curl -s --max-time 5 https://checkip.amazonaws.com); then
@@ -584,16 +598,22 @@ if [[ "$ENGINE" == "mysql" ]]; then
   else
     TMP_PW=$(grep 'temporary password' /var/log/mysqld.log | tail -1 | awk '{print $NF}')
     [[ -n "$TMP_PW" ]] || { echo "Cannot find the temporary root password in /var/log/mysqld.log"; exit 1; }
-    mysql -uroot -p"${TMP_PW}" --connect-expired-password \
-      -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '${MYSQL_ROOT_PASSWORD}';"
+    if ! mysql -uroot -p"${TMP_PW}" --connect-expired-password \
+         -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '${MYSQL_ROOT_PASSWORD}';"; then
+      echo "Could not log in as root with the saved or the temporary password."
+      echo "The root password was probably changed by an earlier run. See Part 12 (troubleshooting)."
+      exit 1
+    fi
     echo "Temporary root password replaced."
   fi
-  cat > /root/.my.cnf <<EOF
+  # Quote the password: in MySQL option files an unquoted '#' starts a comment
+  ( umask 077
+    cat > /root/.my.cnf <<EOF
 [client]
 user=root
-password=${MYSQL_ROOT_PASSWORD}
+password="${MYSQL_ROOT_PASSWORD}"
 EOF
-  chmod 600 /root/.my.cnf
+  )
 else
   echo "MariaDB root uses unix_socket authentication (sudo mysql). No password needed."
 fi
@@ -617,13 +637,6 @@ SQL
 
 log "   Seeding sample data from seed.sql"
 sql "${DB_NAME}" < "$SEED_FILE"
-
-# Save credentials for re-runs (root-only file)
-cat > "$CRED_FILE" <<EOF
-MYSQL_ROOT_PASSWORD='${MYSQL_ROOT_PASSWORD}'
-DB_APP_PASSWORD='${DB_APP_PASSWORD}'
-EOF
-chmod 600 "$CRED_FILE"
 
 # ---------------------------------------------------------------------------
 log "6/6 Verifying"
@@ -1211,6 +1224,7 @@ sudo DB_HOST=<BACKEND_PRIVATE_IP> DB_PASSWORD='<APPUSER_PASSWORD>' bash ~/fronte
 Then open **`http://<FRONTEND_PUBLIC_IP>/`** in your browser. Note that it's `http`, not `https`.
 
 ✅ **Checkpoint:**
+
 - The page lists 8 courses and 12 students.
 - The **Served by** panel shows the front-end's instance ID, AZ 1, its private IP `10.10.1.x`, and the DB host `10.10.11.x`.
 - Registering a new student succeeds, and the student appears at the top of the list.
@@ -1222,21 +1236,21 @@ Then open **`http://<FRONTEND_PUBLIC_IP>/`** in your browser. Note that it's `ht
 
 Run every test and record the result. **A ❌ that is expected is a pass.**
 
-| # | From | Command | Expected | Why |
-|---|------|---------|----------|-----|
-| 1 | Laptop | `ssh lab-bastion` | ✅ Connects | `lab-bastion-sg` allows 22 from your IP |
-| 2 | Laptop | `ssh -i ~/.ssh/lab-net-key.pem ec2-user@<FRONTEND_PUBLIC_IP>` | ❌ Times out | Front-end SSH only from `lab-bastion-sg` |
-| 3 | Laptop | Browser `http://<FRONTEND_PUBLIC_IP>/` | ✅ Page loads | HTTP 80 open to the world |
-| 4 | Laptop | `ping <BACKEND_PRIVATE_IP>` | ❌ No route | Private IPs aren't routable from the internet |
-| 5 | Bastion | `nc -zv -w3 <FRONTEND_PRIVATE_IP> 22` | ✅ Connected | SG chaining: bastion → front-end |
-| 6 | Bastion | `nc -zv -w3 <BACKEND_PRIVATE_IP> 22` | ✅ Connected | SG chaining: bastion → back-end |
-| 7 | Bastion | `nc -zv -w3 <BACKEND_PRIVATE_IP> 3306` | ❌ Timed out | MySQL only from `lab-frontend-sg` (least privilege) |
-| 8 | Front-end | `nc -zv -w3 <BACKEND_PRIVATE_IP> 3306` | ✅ Connected | Web tier → DB allowed |
-| 9 | Back-end | `curl -s https://checkip.amazonaws.com` | ✅ NAT EIP | Outbound internet via NAT |
-| 10 | Back-end | `curl -s -m5 http://<FRONTEND_PRIVATE_IP>` | ✅ HTML returned | `0.0.0.0/0` matches **every** IPv4 source, including private IPs inside the VPC |
-| 11 | Front-end | `curl -s https://checkip.amazonaws.com` | ✅ Front-end's **own** public IP | Public subnet → IGW directly, **not** via NAT |
+| #   | From      | Command                                                       | Expected                         | Why                                                                             |
+| --- | --------- | ------------------------------------------------------------- | -------------------------------- | ------------------------------------------------------------------------------- |
+| 1   | Laptop    | `ssh lab-bastion`                                             | ✅ Connects                      | `lab-bastion-sg` allows 22 from your IP                                         |
+| 2   | Laptop    | `ssh -i ~/.ssh/lab-net-key.pem ec2-user@<FRONTEND_PUBLIC_IP>` | ❌ Times out                     | Front-end SSH only from `lab-bastion-sg`                                        |
+| 3   | Laptop    | Browser `http://<FRONTEND_PUBLIC_IP>/`                        | ✅ Page loads                    | HTTP 80 open to the world                                                       |
+| 4   | Laptop    | `ping <BACKEND_PRIVATE_IP>`                                   | ❌ No route                      | Private IPs aren't routable from the internet                                   |
+| 5   | Bastion   | `nc -zv -w3 <FRONTEND_PRIVATE_IP> 22`                         | ✅ Connected                     | SG chaining: bastion → front-end                                                |
+| 6   | Bastion   | `nc -zv -w3 <BACKEND_PRIVATE_IP> 22`                          | ✅ Connected                     | SG chaining: bastion → back-end                                                 |
+| 7   | Bastion   | `nc -zv -w3 <BACKEND_PRIVATE_IP> 3306`                        | ❌ Timed out                     | MySQL only from `lab-frontend-sg` (least privilege)                             |
+| 8   | Front-end | `nc -zv -w3 <BACKEND_PRIVATE_IP> 3306`                        | ✅ Connected                     | Web tier → DB allowed                                                           |
+| 9   | Back-end  | `curl -s https://checkip.amazonaws.com`                       | ✅ NAT EIP                       | Outbound internet via NAT                                                       |
+| 10  | Back-end  | `curl -s -m5 http://<FRONTEND_PRIVATE_IP>`                    | ✅ HTML returned                 | `0.0.0.0/0` matches **every** IPv4 source, including private IPs inside the VPC |
+| 11  | Front-end | `curl -s https://checkip.amazonaws.com`                       | ✅ Front-end's **own** public IP | Public subnet → IGW directly, **not** via NAT                                   |
 
-> 🧠 **About test 10:** many trainees expect this to fail. "Anywhere-IPv4" (`0.0.0.0/0`) means *any source that can route to the instance*, including other servers inside the VPC. If the web tier should accept traffic only from a load balancer, reference the load balancer's security group instead (Extension Challenge A).
+> 🧠 **About test 10:** many trainees expect this to fail. "Anywhere-IPv4" (`0.0.0.0/0`) means _any source that can route to the instance_, including other servers inside the VPC. If the web tier should accept traffic only from a load balancer, reference the load balancer's security group instead (Extension Challenge A).
 
 > 🧠 **Compare tests 9 and 11.** The back-end exits through the NAT's EIP, while the front-end uses its own public IP. Which route table each subnet uses decides which path the traffic takes.
 
@@ -1246,26 +1260,28 @@ Run every test and record the result. **A ❌ that is expected is a pass.**
 
 ### 12.1 Read the error message: it tells you the layer
 
-| Symptom | Layer | Most likely cause |
-|---------|-------|-------------------|
-| **Connection timed out** (SSH, `nc`, PHP "timed out") | Network | Security group or NACL dropping packets, missing route, wrong IP |
-| **Connection refused** | Host | The path works, but no process listens on the port (service stopped, or bound to 127.0.0.1) |
-| **Access denied for user 'appuser'@'10.10.1.x'** | Application | Wrong password, or MySQL user host pattern doesn't match the client IP |
-| **Permission denied (publickey)** | SSH auth | Wrong key or user (`ec2-user` on AL2023), key file permissions too open |
-| **Could not resolve hostname lab-…** | Local | Typo in `~/.ssh/config` or wrong file location |
+| Symptom                                               | Layer       | Most likely cause                                                                           |
+| ----------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------- |
+| **Connection timed out** (SSH, `nc`, PHP "timed out") | Network     | Security group or NACL dropping packets, missing route, wrong IP                            |
+| **Connection refused**                                | Host        | The path works, but no process listens on the port (service stopped, or bound to 127.0.0.1) |
+| **Access denied for user 'appuser'@'10.10.1.x'**      | Application | Wrong password, or MySQL user host pattern doesn't match the client IP                      |
+| **Permission denied (publickey)**                     | SSH auth    | Wrong key or user (`ec2-user` on AL2023), key file permissions too open                     |
+| **Could not resolve hostname lab-…**                  | Local       | Typo in `~/.ssh/config` or wrong file location                                              |
 
 ### 12.2 Common problems
 
-| Problem | Check |
-|---------|-------|
-| Can't SSH to the bastion | Bastion has a public IP? `lab-public-rt` associated with `lab-bastion-subnet`? Route `0.0.0.0/0 → igw`? `lab-bastion-sg` source = your **current** IP? |
-| `ssh lab-backend` hangs | `lab-backend-sg` allows SSH from **`lab-bastion-sg`** (the SG, not a CIDR)? Correct private IP in `~/.ssh/config`? |
-| `backend-mysql.sh` fails at step 1 (no internet) | NAT Gateway **Available** and in a **public** subnet? `lab-private-rt` has `0.0.0.0/0 → nat` and is associated with `lab-private-a`? |
-| MySQL repo install fails | The script falls back to MariaDB automatically. You can also run `sudo dnf clean all` and try again |
-| Web page shows "Cannot reach the database" (timeout) | `lab-backend-sg` inbound 3306 from **`lab-frontend-sg`**; correct `DB_HOST` in `/var/www/labapp/config.php` |
-| "Access denied" | Password in `/var/www/labapp/config.php` matches `sudo cat /root/lab-credentials.txt` on the back-end |
-| Blank page / HTTP 500 | `sudo tail -50 /var/log/php-fpm/www-error.log` and `sudo tail -50 /var/log/httpd/error_log` |
-| Page loads over the IP but not on the next day | You stopped/started the front-end, so its public IP changed (use an Elastic IP to keep it fixed) |
+| Problem                                                                             | Check                                                                                                                                                                                                                |
+| ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Can't SSH to the bastion                                                            | Bastion has a public IP? `lab-public-rt` associated with `lab-bastion-subnet`? Route `0.0.0.0/0 → igw`? `lab-bastion-sg` source = your **current** IP?                                                               |
+| `ssh lab-backend` hangs                                                             | `lab-backend-sg` allows SSH from **`lab-bastion-sg`** (the SG, not a CIDR)? Correct private IP in `~/.ssh/config`?                                                                                                   |
+| `backend-mysql.sh` fails at step 1 (no internet)                                    | NAT Gateway **Available** and in a **public** subnet? `lab-private-rt` has `0.0.0.0/0 → nat` and is associated with `lab-private-a`?                                                                                 |
+| MySQL repo install fails                                                            | The script falls back to MariaDB automatically. You can also run `sudo dnf clean all` and try again                                                                                                                  |
+| `backend-mysql.sh` stops at step 4 with "Access denied for user 'root'@'localhost'" | Root's password was changed by an earlier run whose credentials weren't saved. Recover it from `sudo cat /root/.my.cnf`, save it in `/root/lab-credentials.txt` as `MYSQL_ROOT_PASSWORD='…'`, then re-run the script |
+| `syntax error near unexpected token 'newline'` … `<!DOCTYPE html>`                  | The script file is a downloaded **web page**, not the script. Copy it with `scp`, or download the _raw_ URL with `curl -fsSLO`                                                                                       |
+| Web page shows "Cannot reach the database" (timeout)                                | `lab-backend-sg` inbound 3306 from **`lab-frontend-sg`**; correct `DB_HOST` in `/var/www/labapp/config.php`                                                                                                          |
+| "Access denied"                                                                     | Password in `/var/www/labapp/config.php` matches `sudo cat /root/lab-credentials.txt` on the back-end                                                                                                                |
+| Blank page / HTTP 500                                                               | `sudo tail -50 /var/log/php-fpm/www-error.log` and `sudo tail -50 /var/log/httpd/error_log`                                                                                                                          |
+| Page loads over the IP but not on the next day                                      | You stopped/started the front-end, so its public IP changed (use an Elastic IP to keep it fixed)                                                                                                                     |
 
 ### 12.3 Useful commands
 
@@ -1291,20 +1307,21 @@ curl -s localhost/health.php
 
 For each scenario: make the change, observe the symptom, explain it, then **revert it**.
 
-| # | Break it | Observe | What you learn |
-|---|----------|---------|----------------|
-| B1 | Remove the `0.0.0.0/0 → nat` route from `lab-private-rt` | On the back-end, `sudo dnf check-update` hangs/fails; the web app **still works** | The NAT is only for *outbound* internet; VPC-internal traffic uses the `local` route |
-| B2 | Delete the inbound 3306 rule from `lab-backend-sg` | Web page shows **timeout** after ~3 s; `/health.php` returns 503 | SGs **drop** silently, so you see a timeout, not a refusal |
-| B3 | On the back-end: `sudo systemctl stop mysqld` | Web page shows **connection refused** immediately | Refused = network OK, service down |
-| B4 | Change `lab-bastion-sg` source to `0.0.0.0/0`, then open **EC2 → Security Groups** and **Trusted Advisor / Security Hub** | Security warnings appear | Why SSH must never be open to the world |
-| B5 | Associate `lab-private-a` with `lab-public-rt` | Back-end **still cannot** reach the internet | A route to the IGW isn't enough: the instance also needs a **public IP** |
-| B6 | Create a custom NACL for `lab-private-a` with only an inbound allow for 3306 | Web app breaks even though SGs are correct | NACLs are **stateless**: return traffic on ephemeral ports 1024–65535 must be allowed explicitly |
+| #   | Break it                                                                                                                  | Observe                                                                           | What you learn                                                                                   |
+| --- | ------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| B1  | Remove the `0.0.0.0/0 → nat` route from `lab-private-rt`                                                                  | On the back-end, `sudo dnf check-update` hangs/fails; the web app **still works** | The NAT is only for _outbound_ internet; VPC-internal traffic uses the `local` route             |
+| B2  | Delete the inbound 3306 rule from `lab-backend-sg`                                                                        | Web page shows **timeout** after ~3 s; `/health.php` returns 503                  | SGs **drop** silently, so you see a timeout, not a refusal                                       |
+| B3  | On the back-end: `sudo systemctl stop mysqld`                                                                             | Web page shows **connection refused** immediately                                 | Refused = network OK, service down                                                               |
+| B4  | Change `lab-bastion-sg` source to `0.0.0.0/0`, then open **EC2 → Security Groups** and **Trusted Advisor / Security Hub** | Security warnings appear                                                          | Why SSH must never be open to the world                                                          |
+| B5  | Associate `lab-private-a` with `lab-public-rt`                                                                            | Back-end **still cannot** reach the internet                                      | A route to the IGW isn't enough: the instance also needs a **public IP**                         |
+| B6  | Create a custom NACL for `lab-private-a` with only an inbound allow for 3306                                              | Web app breaks even though SGs are correct                                        | NACLs are **stateless**: return traffic on ephemeral ports 1024–65535 must be allowed explicitly |
 
 ---
 
 ## Part 14 — Extension challenges
 
 ### Challenge A — Load balancing across two AZs
+
 1. Launch a second front-end in **`lab-public-b`** (AZ 2) using the same steps as Part 10.
 2. Create an **Application Load Balancer** (`lab-alb`) in `lab-public-a` + `lab-public-b`, with a new SG `lab-alb-sg` allowing HTTP 80 from anywhere.
 3. Target group `lab-web-tg` (instances, HTTP 80, health check path **`/health.php`**).
@@ -1312,15 +1329,19 @@ For each scenario: make the change, observe the symptom, explain it, then **reve
 5. ✅ Refreshing the ALB DNS name alternates the **Availability Zone** in the "Served by" panel.
 
 ### Challenge B — Highly available NAT
+
 Create `lab-nat-b` in `lab-public-b`, then a second route table `lab-private-rt-b` (`0.0.0.0/0 → lab-nat-b`) associated with `lab-private-b`. Explain why this removes a cross-AZ single point of failure.
 
 ### Challenge C — VPC Flow Logs
+
 Enable Flow Logs on `lab-vpc` → CloudWatch Logs (`/lab/vpc-flow`). Repeat test 7 from Part 11 and find the **REJECT** record for port 3306 from the bastion's IP.
 
 ### Challenge D — Replace the bastion with Session Manager
+
 Attach an IAM role with `AmazonSSMManagedInstanceCore` to both servers, connect with **Systems Manager → Session Manager**, then remove SSH from all SGs and terminate the bastion. Compare the security posture.
 
 ### Challenge E — Move the database to Amazon RDS
+
 Create a DB subnet group with `lab-private-a` + `lab-private-b`, launch RDS for MySQL with `lab-backend-sg`, load `seed.sql`, and point `config.php` at the RDS endpoint.
 
 ---
@@ -1329,15 +1350,15 @@ Create a DB subnet group with `lab-private-a` + `lab-private-b`, launch RDS for 
 
 > Dependencies block deletions. Follow the order exactly.
 
-1. **EC2 → Instances:** select `lab-bastion`, `lab-frontend`, `lab-backend` (and any extra front-end) → **Instance state → Terminate**. Wait until they show *Terminated*.
-2. *(If you did Challenge A)* Delete the **load balancer**, then the **target group**.
-3. **VPC → NAT gateways:** delete `lab-nat` (and `lab-nat-b`). Wait for *Deleted* (~1–2 min).
+1. **EC2 → Instances:** select `lab-bastion`, `lab-frontend`, `lab-backend` (and any extra front-end) → **Instance state → Terminate**. Wait until they show _Terminated_.
+2. _(If you did Challenge A)_ Delete the **load balancer**, then the **target group**.
+3. **VPC → NAT gateways:** delete `lab-nat` (and `lab-nat-b`). Wait for _Deleted_ (~1–2 min).
 4. **VPC → Elastic IPs:** **Release** the NAT's Elastic IP(s). ⚠️ Unreleased EIPs keep billing.
 5. **Security groups:** delete `lab-backend-sg`, then `lab-frontend-sg` (and `lab-alb-sg`), then `lab-bastion-sg`. Groups referenced by other groups must be deleted last.
 6. **Internet gateways:** select `lab-igw` → **Actions → Detach from VPC** → then **Delete**.
 7. **Your VPCs:** select `lab-vpc` → **Actions → Delete VPC**. This removes the subnets, route tables and the default NACL/SG together.
 8. **EC2 → Key pairs:** delete `lab-net-key`. Remove the `lab-*` block from `~/.ssh/config`.
-9. *(If you did Challenge C)* Delete the CloudWatch log group `/lab/vpc-flow`.
+9. _(If you did Challenge C)_ Delete the CloudWatch log group `/lab/vpc-flow`.
 
 ✅ **Final check:** VPC dashboard shows no `lab-*` resources in `us-west-1`, and **EC2 → Elastic IPs** is empty.
 
@@ -1361,7 +1382,7 @@ Create a DB subnet group with `lab-private-a` + `lab-private-b`, launch RDS for 
 
 1. (a) The subnet's route table has `0.0.0.0/0 → IGW` (and the IGW is attached to the VPC); (b) the instance has a public IPv4 or Elastic IP; (c) security group and NACL allow the traffic (outbound rules and, for NACLs, inbound ephemeral ports).
 2. The NAT Gateway itself needs internet access through the IGW. It translates private source IPs to its Elastic IP, and only a public subnet routes to the IGW.
-3. The rule follows the instance's *role*. Any instance with `lab-frontend-sg` (e.g. a second web server in `lab-public-b`, `10.10.2.0/24`) is allowed automatically, while any other instance in `10.10.1.0/24` (such as the NAT or a rogue host) is not.
+3. The rule follows the instance's _role_. Any instance with `lab-frontend-sg` (e.g. a second web server in `lab-public-b`, `10.10.2.0/24`) is allowed automatically, while any other instance in `10.10.1.0/24` (such as the NAT or a rogue host) is not.
 4. No. It's by design: `lab-backend-sg` allows 3306 only from `lab-frontend-sg` (least privilege). The bastion is allowed only SSH.
 5. **11**. A /28 has 16 addresses, minus 5 reserved by AWS (network, VPC router, DNS, future use, broadcast).
 6. The NAT Gateway's **Elastic IP**. The private route table sends `0.0.0.0/0` to the NAT, which performs source NAT.
