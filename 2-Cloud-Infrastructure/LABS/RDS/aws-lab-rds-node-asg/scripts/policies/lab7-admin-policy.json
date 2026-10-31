@@ -1,0 +1,43 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DescribeTheDatabaseAndProxy",
+      "Effect": "Allow",
+      "Action": [
+        "rds:DescribeDBInstances",
+        "rds:DescribeDBProxies",
+        "rds:DescribeDBProxyTargets",
+        "rds:DescribeDBProxyTargetGroups"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ReadTheRdsManagedMasterSecret",
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:DescribeSecret"
+      ],
+      "Resource": "arn:aws:secretsmanager:us-west-1:*:secret:rds!db-*"
+    },
+    {
+      "Sid": "ManageTheAppSecret",
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:CreateSecret",
+        "secretsmanager:PutSecretValue",
+        "secretsmanager:GetSecretValue",
+        "secretsmanager:DescribeSecret",
+        "secretsmanager:TagResource"
+      ],
+      "Resource": "arn:aws:secretsmanager:us-west-1:*:secret:lab7/app/db-*"
+    },
+    {
+      "Sid": "GeneratePasswords",
+      "Effect": "Allow",
+      "Action": "secretsmanager:GetRandomPassword",
+      "Resource": "*"
+    }
+  ]
+}

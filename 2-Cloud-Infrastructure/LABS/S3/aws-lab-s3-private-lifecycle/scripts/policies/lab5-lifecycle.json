@@ -1,0 +1,32 @@
+{
+  "Rules": [
+    {
+      "ID": "logs-tiering",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "logs/" },
+      "Transitions": [
+        { "Days": 30,  "StorageClass": "STANDARD_IA" },
+        { "Days": 90,  "StorageClass": "GLACIER_IR" },
+        { "Days": 180, "StorageClass": "DEEP_ARCHIVE" }
+      ],
+      "Expiration": { "Days": 730 }
+    },
+    {
+      "ID": "tmp-expire-after-1-day",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "tmp/" },
+      "Expiration": { "Days": 1 }
+    },
+    {
+      "ID": "versions-and-housekeeping",
+      "Status": "Enabled",
+      "Filter": {},
+      "NoncurrentVersionTransitions": [
+        { "NoncurrentDays": 30, "StorageClass": "GLACIER_IR" }
+      ],
+      "NoncurrentVersionExpiration": { "NoncurrentDays": 90, "NewerNoncurrentVersions": 2 },
+      "Expiration": { "ExpiredObjectDeleteMarker": true },
+      "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 7 }
+    }
+  ]
+}

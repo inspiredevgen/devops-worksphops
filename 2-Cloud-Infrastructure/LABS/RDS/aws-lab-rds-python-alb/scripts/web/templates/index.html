@@ -1,0 +1,127 @@
+<!doctype html>
+<!-- File: scripts/web/templates/index.html (Jinja2 template, auto-escaped by Flask) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pacific Learning Co. · Student Registry</title>
+<style>
+  :root { --bg:#f5f7fb; --card:#fff; --ink:#1d2433; --muted:#5b6475; --line:#e3e7ef;
+          --brand:#ff9900; --navy:#232f3e; --ok:#1e7e34; --err:#b42318; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background:var(--bg); color:var(--ink); }
+  header { background:var(--navy); color:#fff; padding:18px 24px; border-bottom:4px solid var(--brand); }
+  header h1 { margin:0; font-size:1.35rem; } header p { margin:4px 0 0; color:#c9d1dc; font-size:.9rem; }
+  main { max-width:1150px; margin:24px auto; padding:0 16px; display:grid; gap:20px; grid-template-columns: 2fr 1fr; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:18px 20px; }
+  .full { grid-column: 1 / -1; }
+  h2 { font-size:1.05rem; margin:0 0 12px; }
+  table { width:100%; border-collapse:collapse; font-size:.9rem; }
+  th, td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--line); }
+  th { color:var(--muted); font-weight:600; font-size:.8rem; text-transform:uppercase; letter-spacing:.03em; }
+  dl { display:grid; grid-template-columns: auto 1fr; gap:6px 12px; margin:0; font-size:.86rem; }
+  dt { color:var(--muted); } dd { margin:0; font-family: ui-monospace, Menlo, Consolas, monospace; word-break:break-all; }
+  form { display:grid; gap:10px; }
+  input, select, button { font:inherit; padding:9px 10px; border:1px solid var(--line); border-radius:8px; }
+  button { background:var(--brand); border-color:var(--brand); color:#111; font-weight:600; cursor:pointer; }
+  .flash { padding:12px 14px; border-radius:8px; font-size:.92rem; }
+  .flash.ok { background:#e8f5ec; color:var(--ok); } .flash.error { background:#fdecea; color:var(--err); }
+  .badge { display:inline-block; padding:2px 8px; border-radius:999px; background:#eef2f8; font-size:.8rem; }
+  .az { display:inline-block; padding:3px 10px; border-radius:999px; background:var(--brand); color:#111; font-weight:700; }
+  code { background:#eef2f8; padding:1px 5px; border-radius:4px; }
+  .note { font-size:.82rem; color:var(--muted); }
+  @media (max-width: 860px) { main { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Pacific Learning Co. · Student Registry</h1>
+  <p>{{ runtime_label }} · ALB → web servers (private subnets) → Amazon RDS for MySQL · served from
+     <span class="az">{{ az }}</span></p>
+</header>
+<main>
+
+{% if flash_msg %}
+  <div class="flash {{ 'ok' if flash_type == 'ok' else 'error' }} full">{{ flash_msg }}</div>
+{% endif %}
+
+{% if data.error %}
+  <div class="card full">
+    <div class="flash error"><strong>Cannot reach the database.</strong> {{ data.error }}</div>
+    <p><strong>Hint:</strong> {{ hint }}</p>
+    <p>Test from this web server: <code>nc -zv {{ info['RDS endpoint'] }} 3306</code></p>
+  </div>
+{% endif %}
+
+  <section class="card">
+    <h2>Courses</h2>
+    <table>
+      <thead><tr><th>Code</th><th>Title</th><th>Track</th><th>Hours</th><th>Enrolled</th><th>Completed</th></tr></thead>
+      <tbody>
+      {% for c in data.courses %}
+        <tr>
+          <td><span class="badge">{{ c.code }}</span></td>
+          <td>{{ c.title }}</td>
+          <td>{{ c.track }}</td>
+          <td>{{ c.hours }}</td>
+          <td>{{ c.enrolled }}</td>
+          <td>{{ c.completed | int }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6">No data.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <aside class="card">
+    <h2>Served by</h2>
+    <dl>
+      {% for label, value in info.items() %}
+        <dt>{{ label }}</dt><dd>{{ value }}</dd>
+      {% endfor %}
+    </dl>
+    <p class="note">Refresh the page (or use a private window) to be routed to the other instance by the load balancer.</p>
+  </aside>
+
+  <section class="card">
+    <h2>Students (latest 50)</h2>
+    <table>
+      <thead><tr><th>#</th><th>Name</th><th>Email</th><th>City</th><th>Courses</th><th>Joined</th></tr></thead>
+      <tbody>
+      {% for s in data.students %}
+        <tr>
+          <td>{{ s.id }}</td>
+          <td>{{ s.full_name }}</td>
+          <td>{{ s.email }}</td>
+          <td>{{ s.city or '' }}</td>
+          <td>{{ s.courses or '' }}</td>
+          <td>{{ s.joined }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6">No data.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <aside class="card">
+    <h2>Register a student</h2>
+    <form method="post" action="/students">
+      <input name="full_name" placeholder="Full name" required maxlength="100">
+      <input name="email" type="email" placeholder="Email" required maxlength="120">
+      <input name="city" placeholder="City" maxlength="60">
+      <select name="course_code">
+        <option value="">— Enrol in a course (optional) —</option>
+        {% for c in data.courses %}
+          <option value="{{ c.code }}">{{ c.code }} · {{ c.title }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit">Register</button>
+    </form>
+    <p class="note">Path of the write: browser → IGW → ALB (public subnets) → web instance (private subnet) → RDS 3306 over TLS.</p>
+  </aside>
+
+</main>
+</body>
+</html>
