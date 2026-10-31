@@ -1,0 +1,12 @@
+Pacific Learning Co. - Enrollment report - October 2026
+=======================================================
+Course    Enrolled  Completed
+AWS-101          9          7
+AWS-IAM          3          1
+AWS-NET          5          1
+AWS-CMP          3          0
+AWS-STO          2          0
+AWS-DB           2          0
+AWS-IAC          2          0
+AWS-OPS          2          1
+Prepared by: Finance & Registrar office (read-only for applications)
