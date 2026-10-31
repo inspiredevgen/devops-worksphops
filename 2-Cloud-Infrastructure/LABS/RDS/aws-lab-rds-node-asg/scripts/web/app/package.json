@@ -1,0 +1,19 @@
+{
+  "name": "pacific-learning-registry",
+  "version": "1.0.0",
+  "description": "Lab 7 - Student registry (Node.js + Express) on EC2 Auto Scaling, RDS Proxy and Amazon RDS for MySQL",
+  "main": "server.js",
+  "private": true,
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-secrets-manager": "3.1139.0",
+    "express": "5.2.1",
+    "mysql2": "3.24.5"
+  }
+}
