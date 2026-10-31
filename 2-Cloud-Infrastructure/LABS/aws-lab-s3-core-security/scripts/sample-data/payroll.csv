@@ -1,0 +1,5 @@
+employee_id,name,department,monthly_salary_cad
+E-1001,Instructor A,Cloud Training,7200
+E-1002,Instructor B,Networking,6900
+E-1003,Registrar,Administration,5400
+# Fictional data for the lab. This file must NEVER be readable by the application role.
