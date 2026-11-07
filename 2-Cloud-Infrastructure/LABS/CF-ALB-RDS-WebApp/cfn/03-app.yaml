@@ -1,0 +1,185 @@
+# File: cfn/03-app.yaml
+# Stack  : lab8-app  (deploy THIRD, after lab8-network and lab8-database)
+# Creates: IAM role + instance profile, 2 Amazon Linux 2023 app instances (one per app subnet),
+#          optional bastion host. Each app instance runs scripts/app/bootstrap.sh at first boot and
+#          sends a signal: the stack reaches CREATE_COMPLETE only when BOTH apps are really ready.
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Lab 8 - App tier: 2 Amazon Linux 2023 instances running the Flask app in the app subnets (+ optional bastion)'
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label: { default: 'Stacks to import from' }
+        Parameters: [NetworkStackName, DatabaseStackName]
+      - Label: { default: 'Instances' }
+        Parameters: [InstanceType, LatestAmiId, KeyName]
+      - Label: { default: 'Application' }
+        Parameters: [BaseUrl, AppVersion]
+
+Parameters:
+  NetworkStackName: { Type: String, Default: lab8-network }
+  DatabaseStackName: { Type: String, Default: lab8-database }
+  InstanceType:
+    Type: String
+    Default: t3.micro
+    AllowedValues: [t3.micro, t3.small, t2.micro]
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+    Description: Public SSM parameter that always points to the latest Amazon Linux 2023 AMI
+  KeyName:
+    Type: String
+    Default: ''
+    Description: 'Optional EC2 key pair name. Empty = no bastion and no SSH (use Session Manager instead)'
+  BaseUrl:
+    Type: String
+    Default: https://raw.githubusercontent.com/inspiredevgen/devops-worksphops/refs/heads/main/2-Cloud-Infrastructure/aws-lab-cfn-webapp/scripts/app
+    Description: Raw URL of the scripts/app folder (bootstrap.sh, app.py, ...)
+  AppVersion:
+    Type: String
+    Default: 1.0.0
+
+Conditions:
+  HasKeyName: !Not [!Equals [!Ref KeyName, '']]
+
+Resources:
+  # ------------------------------------------------------------------ IAM: what the app instances may do
+  AppRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Lab 8 app instances - Session Manager + read the 2 database secrets
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: ec2.amazonaws.com }
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: read-lab8-db-secrets
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource:
+                  - Fn::ImportValue: !Sub '${DatabaseStackName}-MasterSecretArn'
+                  - Fn::ImportValue: !Sub '${DatabaseStackName}-AppSecretArn'
+
+  AppInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [!Ref AppRole]
+
+  # ------------------------------------------------------------------ App instance in AZ 1
+  AppInstanceA:
+    Type: AWS::EC2::Instance
+    CreationPolicy:
+      ResourceSignal: { Count: 1, Timeout: PT25M }   # wait for cfn-signal from bootstrap.sh
+    Properties:
+      ImageId: !Ref LatestAmiId
+      InstanceType: !Ref InstanceType
+      KeyName: !If [HasKeyName, !Ref KeyName, !Ref AWS::NoValue]
+      SubnetId:
+        Fn::ImportValue: !Sub '${NetworkStackName}-AppSubnetA'
+      SecurityGroupIds:
+        - Fn::ImportValue: !Sub '${NetworkStackName}-AppSG'
+      IamInstanceProfile: !Ref AppInstanceProfile
+      MetadataOptions: { HttpTokens: required, HttpEndpoint: enabled, HttpPutResponseHopLimit: 1 }
+      Tags: [{ Key: Name, Value: lab8-app-a }]
+      UserData:
+        Fn::Base64:
+          Fn::Sub:
+            - |
+              #!/bin/bash
+              # Lab 8 - user data of AppInstanceA (rendered by CloudFormation)
+              set -euo pipefail
+              export AWS_REGION='${AWS::Region}' STACK_NAME='${AWS::StackName}' LOGICAL_ID='AppInstanceA'
+              export BASE_URL='${BaseUrl}' APP_VERSION='${AppVersion}'
+              export DB_HOST='${DbEndpoint}' MASTER_SECRET_ARN='${MasterSecretArn}' APP_SECRET_ARN='${AppSecretArn}'
+              export APP_HOSTS='${AppCidrA} ${AppCidrB}'
+              if ! curl -fsSL --retry 5 --retry-delay 5 -o /root/bootstrap.sh "$BASE_URL/bootstrap.sh"; then
+                dnf -y -q install aws-cfn-bootstrap
+                /opt/aws/bin/cfn-signal -e 1 --stack "$STACK_NAME" --resource "$LOGICAL_ID" --region "$AWS_REGION" \
+                  --reason "Cannot download bootstrap.sh from $BASE_URL"
+                exit 1
+              fi
+              bash /root/bootstrap.sh
+            - DbEndpoint: { 'Fn::ImportValue': !Sub '${DatabaseStackName}-DbEndpoint' }
+              MasterSecretArn: { 'Fn::ImportValue': !Sub '${DatabaseStackName}-MasterSecretArn' }
+              AppSecretArn: { 'Fn::ImportValue': !Sub '${DatabaseStackName}-AppSecretArn' }
+              AppCidrA: { 'Fn::ImportValue': !Sub '${NetworkStackName}-AppSubnetACidr' }
+              AppCidrB: { 'Fn::ImportValue': !Sub '${NetworkStackName}-AppSubnetBCidr' }
+
+  # ------------------------------------------------------------------ App instance in AZ 2
+  AppInstanceB:
+    Type: AWS::EC2::Instance
+    CreationPolicy:
+      ResourceSignal: { Count: 1, Timeout: PT25M }
+    Properties:
+      ImageId: !Ref LatestAmiId
+      InstanceType: !Ref InstanceType
+      KeyName: !If [HasKeyName, !Ref KeyName, !Ref AWS::NoValue]
+      SubnetId:
+        Fn::ImportValue: !Sub '${NetworkStackName}-AppSubnetB'
+      SecurityGroupIds:
+        - Fn::ImportValue: !Sub '${NetworkStackName}-AppSG'
+      IamInstanceProfile: !Ref AppInstanceProfile
+      MetadataOptions: { HttpTokens: required, HttpEndpoint: enabled, HttpPutResponseHopLimit: 1 }
+      Tags: [{ Key: Name, Value: lab8-app-b }]
+      UserData:
+        Fn::Base64:
+          Fn::Sub:
+            - |
+              #!/bin/bash
+              # Lab 8 - user data of AppInstanceB (rendered by CloudFormation)
+              set -euo pipefail
+              export AWS_REGION='${AWS::Region}' STACK_NAME='${AWS::StackName}' LOGICAL_ID='AppInstanceB'
+              export BASE_URL='${BaseUrl}' APP_VERSION='${AppVersion}'
+              export DB_HOST='${DbEndpoint}' MASTER_SECRET_ARN='${MasterSecretArn}' APP_SECRET_ARN='${AppSecretArn}'
+              export APP_HOSTS='${AppCidrA} ${AppCidrB}'
+              if ! curl -fsSL --retry 5 --retry-delay 5 -o /root/bootstrap.sh "$BASE_URL/bootstrap.sh"; then
+                dnf -y -q install aws-cfn-bootstrap
+                /opt/aws/bin/cfn-signal -e 1 --stack "$STACK_NAME" --resource "$LOGICAL_ID" --region "$AWS_REGION" \
+                  --reason "Cannot download bootstrap.sh from $BASE_URL"
+                exit 1
+              fi
+              bash /root/bootstrap.sh
+            - DbEndpoint: { 'Fn::ImportValue': !Sub '${DatabaseStackName}-DbEndpoint' }
+              MasterSecretArn: { 'Fn::ImportValue': !Sub '${DatabaseStackName}-MasterSecretArn' }
+              AppSecretArn: { 'Fn::ImportValue': !Sub '${DatabaseStackName}-AppSecretArn' }
+              AppCidrA: { 'Fn::ImportValue': !Sub '${NetworkStackName}-AppSubnetACidr' }
+              AppCidrB: { 'Fn::ImportValue': !Sub '${NetworkStackName}-AppSubnetBCidr' }
+
+  # ------------------------------------------------------------------ Optional bastion (only with a key pair)
+  Bastion:
+    Type: AWS::EC2::Instance
+    Condition: HasKeyName
+    Properties:
+      ImageId: !Ref LatestAmiId
+      InstanceType: t3.micro
+      KeyName: !Ref KeyName
+      SubnetId:
+        Fn::ImportValue: !Sub '${NetworkStackName}-BastionSubnetA'
+      SecurityGroupIds:
+        - Fn::ImportValue: !Sub '${NetworkStackName}-BastionSG'
+      MetadataOptions: { HttpTokens: required, HttpEndpoint: enabled }
+      Tags: [{ Key: Name, Value: lab8-bastion }]
+
+Outputs:
+  AppInstanceAId:
+    Value: !Ref AppInstanceA
+    Export: { Name: !Sub '${AWS::StackName}-AppInstanceAId' }
+  AppInstanceBId:
+    Value: !Ref AppInstanceB
+    Export: { Name: !Sub '${AWS::StackName}-AppInstanceBId' }
+  AppInstanceAPrivateIp:
+    Value: !GetAtt AppInstanceA.PrivateIp
+  AppInstanceBPrivateIp:
+    Value: !GetAtt AppInstanceB.PrivateIp
+  AppRoleName:
+    Value: !Ref AppRole
+  BastionPublicIp:
+    Condition: HasKeyName
+    Value: !GetAtt Bastion.PublicIp

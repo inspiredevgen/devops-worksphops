@@ -1,0 +1,253 @@
+# File: cfn/01-network.yaml
+# Stack  : lab8-network  (deploy FIRST)
+# Creates: VPC, 6 subnets in 2 AZs (bastion/public, app/private, database/isolated), Internet Gateway,
+#          NAT Gateway, 3 route tables, 4 security groups. Exports every ID for the other stacks.
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Lab 8 - Network layer: VPC, public (bastion + ALB), app and database subnets in 2 AZs, IGW, NAT, route tables, security groups'
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label: { default: 'Addressing' }
+        Parameters: [VpcCidr, BastionSubnetACidr, BastionSubnetBCidr, AppSubnetACidr, AppSubnetBCidr, DbSubnetACidr, DbSubnetBCidr]
+      - Label: { default: 'Access' }
+        Parameters: [AdminCidr]
+
+Parameters:
+  VpcCidr:
+    Type: String
+    Default: 10.20.0.0/16
+    AllowedPattern: '^(\d{1,3}\.){3}\d{1,3}/(1[6-9]|2[0-8])$'
+    Description: CIDR block of the VPC
+  BastionSubnetACidr: { Type: String, Default: 10.20.0.0/24, Description: 'Public subnet AZ 1 (bastion, ALB node, NAT Gateway)' }
+  BastionSubnetBCidr: { Type: String, Default: 10.20.1.0/24, Description: 'Public subnet AZ 2 (ALB node)' }
+  AppSubnetACidr:     { Type: String, Default: 10.20.11.0/24, Description: 'Private app subnet AZ 1' }
+  AppSubnetBCidr:     { Type: String, Default: 10.20.12.0/24, Description: 'Private app subnet AZ 2' }
+  DbSubnetACidr:      { Type: String, Default: 10.20.21.0/24, Description: 'Isolated database subnet AZ 1' }
+  DbSubnetBCidr:      { Type: String, Default: 10.20.22.0/24, Description: 'Isolated database subnet AZ 2' }
+  AdminCidr:
+    Type: String
+    AllowedPattern: '^(\d{1,3}\.){3}\d{1,3}/\d{1,2}$'
+    Description: 'Your public IP for SSH to the bastion, as x.x.x.x/32 (https://checkip.amazonaws.com)'
+
+Resources:
+  # ------------------------------------------------------------------ VPC + Internet Gateway
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags: [{ Key: Name, Value: lab8-vpc }]
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags: [{ Key: Name, Value: lab8-igw }]
+
+  GatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+
+  # ------------------------------------------------------------------ Subnets (AZ 1 = index 0, AZ 2 = index 1)
+  BastionSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !Ref BastionSubnetACidr
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags: [{ Key: Name, Value: lab8-bastion-a }, { Key: Tier, Value: public }]
+  BastionSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !Ref BastionSubnetBCidr
+      AvailabilityZone: !Select [1, !GetAZs '']
+      MapPublicIpOnLaunch: true
+      Tags: [{ Key: Name, Value: lab8-bastion-b }, { Key: Tier, Value: public }]
+  AppSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !Ref AppSubnetACidr
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags: [{ Key: Name, Value: lab8-app-a }, { Key: Tier, Value: app }]
+  AppSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !Ref AppSubnetBCidr
+      AvailabilityZone: !Select [1, !GetAZs '']
+      Tags: [{ Key: Name, Value: lab8-app-b }, { Key: Tier, Value: app }]
+  DbSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !Ref DbSubnetACidr
+      AvailabilityZone: !Select [0, !GetAZs '']
+      Tags: [{ Key: Name, Value: lab8-db-a }, { Key: Tier, Value: database }]
+  DbSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: !Ref DbSubnetBCidr
+      AvailabilityZone: !Select [1, !GetAZs '']
+      Tags: [{ Key: Name, Value: lab8-db-b }, { Key: Tier, Value: database }]
+
+  # ------------------------------------------------------------------ NAT Gateway (one, in AZ 1)
+  NatEip:
+    Type: AWS::EC2::EIP
+    DependsOn: GatewayAttachment
+    Properties:
+      Domain: vpc
+      Tags: [{ Key: Name, Value: lab8-nat-eip }]
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatEip.AllocationId
+      SubnetId: !Ref BastionSubnetA
+      Tags: [{ Key: Name, Value: lab8-nat }]
+
+  # ------------------------------------------------------------------ Route tables
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags: [{ Key: Name, Value: lab8-public-rt }]
+  PublicDefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: GatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  BastionSubnetARouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { SubnetId: !Ref BastionSubnetA, RouteTableId: !Ref PublicRouteTable }
+  BastionSubnetBRouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { SubnetId: !Ref BastionSubnetB, RouteTableId: !Ref PublicRouteTable }
+
+  AppRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags: [{ Key: Name, Value: lab8-app-rt }]
+  AppDefaultRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref AppRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+  AppSubnetARouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { SubnetId: !Ref AppSubnetA, RouteTableId: !Ref AppRouteTable }
+  AppSubnetBRouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { SubnetId: !Ref AppSubnetB, RouteTableId: !Ref AppRouteTable }
+
+  # Database subnets: only the implicit 'local' route -> no path to or from the internet
+  DbRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref Vpc
+      Tags: [{ Key: Name, Value: lab8-db-rt }]
+  DbSubnetARouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { SubnetId: !Ref DbSubnetA, RouteTableId: !Ref DbRouteTable }
+  DbSubnetBRouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { SubnetId: !Ref DbSubnetB, RouteTableId: !Ref DbRouteTable }
+
+  # ------------------------------------------------------------------ Security groups (chain)
+  AlbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: lab8-alb-sg
+      GroupDescription: HTTP from the internet to the ALB
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 80, ToPort: 80, CidrIp: 0.0.0.0/0, Description: 'HTTP from anywhere' }
+      Tags: [{ Key: Name, Value: lab8-alb-sg }]
+
+  BastionSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: lab8-bastion-sg
+      GroupDescription: SSH from the admin IP only
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 22, ToPort: 22, CidrIp: !Ref AdminCidr, Description: 'SSH from the admin IP' }
+      Tags: [{ Key: Name, Value: lab8-bastion-sg }]
+
+  AppSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: lab8-app-sg
+      GroupDescription: App port from the ALB, SSH from the bastion
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 8080, ToPort: 8080, SourceSecurityGroupId: !Ref AlbSecurityGroup, Description: 'App port from the ALB' }
+        - { IpProtocol: tcp, FromPort: 22, ToPort: 22, SourceSecurityGroupId: !Ref BastionSecurityGroup, Description: 'SSH from the bastion' }
+      Tags: [{ Key: Name, Value: lab8-app-sg }]
+
+  DbSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: lab8-db-sg
+      GroupDescription: MySQL from the app tier and the bastion
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 3306, ToPort: 3306, SourceSecurityGroupId: !Ref AppSecurityGroup, Description: 'MySQL from the app tier' }
+        - { IpProtocol: tcp, FromPort: 3306, ToPort: 3306, SourceSecurityGroupId: !Ref BastionSecurityGroup, Description: 'MySQL from the bastion' }
+      Tags: [{ Key: Name, Value: lab8-db-sg }]
+
+Outputs:
+  VpcId:
+    Value: !Ref Vpc
+    Export: { Name: !Sub '${AWS::StackName}-VpcId' }
+  VpcCidr:
+    Value: !GetAtt Vpc.CidrBlock
+    Export: { Name: !Sub '${AWS::StackName}-VpcCidr' }
+  BastionSubnetA:
+    Value: !Ref BastionSubnetA
+    Export: { Name: !Sub '${AWS::StackName}-BastionSubnetA' }
+  BastionSubnetB:
+    Value: !Ref BastionSubnetB
+    Export: { Name: !Sub '${AWS::StackName}-BastionSubnetB' }
+  AppSubnetA:
+    Value: !Ref AppSubnetA
+    Export: { Name: !Sub '${AWS::StackName}-AppSubnetA' }
+  AppSubnetB:
+    Value: !Ref AppSubnetB
+    Export: { Name: !Sub '${AWS::StackName}-AppSubnetB' }
+  AppSubnetACidr:
+    Value: !Ref AppSubnetACidr
+    Export: { Name: !Sub '${AWS::StackName}-AppSubnetACidr' }
+  AppSubnetBCidr:
+    Value: !Ref AppSubnetBCidr
+    Export: { Name: !Sub '${AWS::StackName}-AppSubnetBCidr' }
+  DbSubnetA:
+    Value: !Ref DbSubnetA
+    Export: { Name: !Sub '${AWS::StackName}-DbSubnetA' }
+  DbSubnetB:
+    Value: !Ref DbSubnetB
+    Export: { Name: !Sub '${AWS::StackName}-DbSubnetB' }
+  AlbSecurityGroup:
+    Value: !Ref AlbSecurityGroup
+    Export: { Name: !Sub '${AWS::StackName}-AlbSG' }
+  BastionSecurityGroup:
+    Value: !Ref BastionSecurityGroup
+    Export: { Name: !Sub '${AWS::StackName}-BastionSG' }
+  AppSecurityGroup:
+    Value: !Ref AppSecurityGroup
+    Export: { Name: !Sub '${AWS::StackName}-AppSG' }
+  DbSecurityGroup:
+    Value: !Ref DbSecurityGroup
+    Export: { Name: !Sub '${AWS::StackName}-DbSG' }
+  NatGatewayPublicIp:
+    Description: Source IP of all outbound traffic from the app subnets
+    Value: !Ref NatEip
