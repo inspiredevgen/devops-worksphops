@@ -1,0 +1,82 @@
+# File: cfn/04-alb.yaml
+# Stack  : lab8-alb  (deploy LAST, after lab8-app)
+# Creates: internet-facing Application Load Balancer in the 2 public subnets, target group with the
+#          2 app instances (port 8080, health check /health), HTTP:80 listener.
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Lab 8 - Application Load Balancer routing HTTP traffic to the 2 app instances'
+
+Parameters:
+  NetworkStackName: { Type: String, Default: lab8-network }
+  AppStackName: { Type: String, Default: lab8-app }
+  HealthCheckPath:
+    Type: String
+    Default: /health
+    Description: Liveness URL of the app (/health?strict=1 = readiness, see Part 10)
+  HealthCheckIntervalSeconds:
+    Type: Number
+    Default: 10
+    MinValue: 5
+    MaxValue: 300
+
+Resources:
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: lab8-alb
+      Type: application
+      Scheme: internet-facing
+      IpAddressType: ipv4
+      Subnets:
+        - Fn::ImportValue: !Sub '${NetworkStackName}-BastionSubnetA'
+        - Fn::ImportValue: !Sub '${NetworkStackName}-BastionSubnetB'
+      SecurityGroups:
+        - Fn::ImportValue: !Sub '${NetworkStackName}-AlbSG'
+      LoadBalancerAttributes:
+        - { Key: idle_timeout.timeout_seconds, Value: '60' }
+        - { Key: routing.http.drop_invalid_header_fields.enabled, Value: 'true' }
+      Tags: [{ Key: Name, Value: lab8-alb }]
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: lab8-app-tg
+      TargetType: instance
+      Protocol: HTTP
+      Port: 8080
+      VpcId:
+        Fn::ImportValue: !Sub '${NetworkStackName}-VpcId'
+      HealthCheckProtocol: HTTP
+      HealthCheckPath: !Ref HealthCheckPath
+      HealthCheckIntervalSeconds: !Ref HealthCheckIntervalSeconds
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 2
+      Matcher: { HttpCode: '200' }
+      TargetGroupAttributes:
+        - { Key: deregistration_delay.timeout_seconds, Value: '30' }
+      Targets:
+        - Id: { 'Fn::ImportValue': !Sub '${AppStackName}-AppInstanceAId' }
+          Port: 8080
+        - Id: { 'Fn::ImportValue': !Sub '${AppStackName}-AppInstanceBId' }
+          Port: 8080
+      Tags: [{ Key: Name, Value: lab8-app-tg }]
+
+  HttpListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Protocol: HTTP
+      Port: 80
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+
+Outputs:
+  AlbDnsName:
+    Value: !GetAtt LoadBalancer.DNSName
+    Export: { Name: !Sub '${AWS::StackName}-AlbDnsName' }
+  AppUrl:
+    Description: Open this URL in a browser
+    Value: !Sub 'http://${LoadBalancer.DNSName}/'
+  TargetGroupArn:
+    Value: !Ref TargetGroup
