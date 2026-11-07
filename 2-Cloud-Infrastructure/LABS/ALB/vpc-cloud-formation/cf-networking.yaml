@@ -1,45 +1,57 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: >
-  CloudFormation template to create a VPC with 2 subnets across 2 distinct 
-  Availability Zones in us-west-1, along with an Internet Gateway and Route Table.
+Description: 'AWS CloudFormation template to create a VPC, 2 subnets in distinct Availability Zones, and an Internet Gateway.'
+
+Parameters:
+  VPCCIDR:
+    Type: String
+    Default: 10.0.0.0/16
+    Description: CIDR block for the VPC
+
+  Subnet1CIDR:
+    Type: String
+    Default: 10.0.1.0/24
+    Description: CIDR block for Subnet 1 (AZ 1)
+
+  Subnet2CIDR:
+    Type: String
+    Default: 10.0.2.0/24
+    Description: CIDR block for Subnet 2 (AZ 2)
 
 Resources:
-  # 1. Create the VPC
-  MyVPC:
+  # 1. VPC Configuration
+  VPC:
     Type: AWS::EC2::VPC
     Properties:
-      CidrBlock: 10.0.0.0/16
+      CidrBlock: !Ref VPCCIDR
       EnableDnsSupport: true
       EnableDnsHostnames: true
       Tags:
         - Key: Name
-          Value: us-west-1-vpc
+          Value: MyNewVPC
 
-  # 2. Create Internet Gateway
+  # 2. Internet Gateway & Attachment
   InternetGateway:
     Type: AWS::EC2::InternetGateway
     Properties:
       Tags:
         - Key: Name
-          Value: us-west-1-igw
+          Value: MyVPC-IGW
 
-  # 3. Attach Internet Gateway to the VPC
   VPCGatewayAttachment:
     Type: AWS::EC2::VPCGatewayAttachment
     Properties:
-      VpcId: !Ref MyVPC
+      VpcId: !Ref VPC
       InternetGatewayId: !Ref InternetGateway
 
-  # 4. Create Public Route Table
+  # 3. Public Route Table & Internet Route
   PublicRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
-      VpcId: !Ref MyVPC
+      VpcId: !Ref VPC
       Tags:
         - Key: Name
-          Value: us-west-1-public-rt
+          Value: MyVPC-PublicRouteTable
 
-  # 5. Default Route to Internet via IGW
   PublicRoute:
     Type: AWS::EC2::Route
     DependsOn: VPCGatewayAttachment
@@ -48,38 +60,36 @@ Resources:
       DestinationCidrBlock: 0.0.0.0/0
       GatewayId: !Ref InternetGateway
 
-  # 6. Subnet 1 in Availability Zone us-west-1a
+  # 4. Subnet 1 (First Availability Zone)
   Subnet1:
     Type: AWS::EC2::Subnet
     Properties:
-      VpcId: !Ref MyVPC
-      CidrBlock: 10.0.1.0/24
-      AvailabilityZone: us-west-1a
+      VpcId: !Ref VPC
+      CidrBlock: !Ref Subnet1CIDR
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
       MapPublicIpOnLaunch: true
       Tags:
         - Key: Name
-          Value: us-west-1-subnet-1
+          Value: MyVPC-Subnet1
 
-  # 7. Subnet 2 in Availability Zone us-west-1c
-  Subnet2:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref MyVPC
-      CidrBlock: 10.0.2.0/24
-      AvailabilityZone: us-west-1c
-      MapPublicIpOnLaunch: true
-      Tags:
-        - Key: Name
-          Value: us-west-1-subnet-2
-
-  # 8. Associate Subnet 1 with Public Route Table
   Subnet1RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       SubnetId: !Ref Subnet1
       RouteTableId: !Ref PublicRouteTable
 
-  # 9. Associate Subnet 2 with Public Route Table
+  # 5. Subnet 2 (Second Availability Zone)
+  Subnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref Subnet2CIDR
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: MyVPC-Subnet2
+
   Subnet2RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
@@ -87,26 +97,12 @@ Resources:
       RouteTableId: !Ref PublicRouteTable
 
 Outputs:
-  VpcId:
-    Description: The ID of the newly created VPC
-    Value: !Ref MyVPC
-    Export:
-      Name: !Sub "${AWS::StackName}-VpcId"
-
+  VPCId:
+    Description: The ID of the created VPC
+    Value: !Ref VPC
   Subnet1Id:
-    Description: The ID of Subnet 1 in us-west-1a
+    Description: The ID of Subnet 1
     Value: !Ref Subnet1
-    Export:
-      Name: !Sub "${AWS::StackName}-Subnet1Id"
-
   Subnet2Id:
-    Description: The ID of Subnet 2 in us-west-1c
+    Description: The ID of Subnet 2
     Value: !Ref Subnet2
-    Export:
-      Name: !Sub "${AWS::StackName}-Subnet2Id"
-
-  InternetGatewayId:
-    Description: The ID of the Internet Gateway
-    Value: !Ref InternetGateway
-    Export:
-      Name: !Sub "${AWS::StackName}-InternetGatewayId"
