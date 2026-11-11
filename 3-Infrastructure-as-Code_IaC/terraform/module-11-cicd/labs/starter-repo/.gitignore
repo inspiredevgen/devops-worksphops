@@ -1,0 +1,13 @@
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+tfplan
+*.tfplan
+plan.json
+plan.txt
+policy.txt
+crash.log
+.tflint.d/
+# EN: DO commit .terraform.lock.hcl / FR : COMMITEZ .terraform.lock.hcl

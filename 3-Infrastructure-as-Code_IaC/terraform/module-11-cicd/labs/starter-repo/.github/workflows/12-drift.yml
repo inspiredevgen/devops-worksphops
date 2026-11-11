@@ -1,0 +1,90 @@
+# =============================================================================
+# 12 · Drift detection: plan every weekday with the READ-ONLY identity; open an issue if reality ≠ code.
+# 12 · Détection de dérive : plan chaque jour ouvré avec l'identité en LECTURE SEULE ; ouvrir une issue si réalité ≠ code.
+# =============================================================================
+name: "12 · Drift detection"
+
+on:
+  schedule:
+    - cron: "23 11 * * 1-5" # EN: 11:23 UTC, Mon-Fri / FR : 11 h 23 UTC, du lundi au vendredi
+  workflow_dispatch:
+
+permissions: {}
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "0"
+  TF_VERSION: "~1.14.0"
+
+jobs:
+  drift:
+    name: "Drift · ${{ matrix.cloud }}/${{ matrix.env }}"
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+      issues: write
+    strategy:
+      fail-fast: false
+      matrix:
+        cloud: [aws, azure]
+        env: [dev, prod]
+    defaults:
+      run:
+        working-directory: infra/${{ matrix.cloud }}/envs/${{ matrix.env }}
+    env:
+      CLOUD: ${{ matrix.cloud }}
+      STATE_KEY: module-11/${{ matrix.cloud }}/${{ matrix.env }}.tfstate
+      STACK: ${{ matrix.cloud }}/${{ matrix.env }}
+      ENABLED: ${{ matrix.cloud == 'aws' && vars.AWS_ENABLED || vars.AZURE_ENABLED }}
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      STATE_RG: ${{ vars.TF_STATE_RG }}
+      STATE_SA: ${{ vars.TF_STATE_SA }}
+      STATE_CONTAINER: ${{ vars.TF_STATE_CONTAINER }}
+      ARM_USE_OIDC: "true"
+      ARM_CLIENT_ID: ${{ vars.AZURE_PLAN_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: skip a disabled cloud / ignorer un cloud désactivé
+        id: gate
+        run: echo "run=$([[ "${ENABLED}" == "true" ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.gate.outputs.run == 'true'
+        with:
+          persist-credentials: false
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        if: steps.gate.outputs.run == 'true'
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: AWS login (plan role)
+        if: steps.gate.outputs.run == 'true' && matrix.cloud == 'aws'
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_PLAN_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: init
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          "${GITHUB_WORKSPACE}/scripts/ci/init.sh"
+
+      - name: plan (exit 2 = drift)
+        id: plan
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          "${GITHUB_WORKSPACE}/scripts/ci/plan.sh"
+
+      - name: open, update or close the drift issue / ouvrir, mettre à jour ou fermer l'issue de dérive
+        if: steps.gate.outputs.run == 'true'
+        env:
+          CHANGES: ${{ steps.plan.outputs.changes }}
+        run: |
+          status=$([[ "${CHANGES}" == "true" ]] && echo drift || echo clean)
+          "${GITHUB_WORKSPACE}/scripts/ci/drift-issue.sh" "${STACK}" "${status}" plan.txt

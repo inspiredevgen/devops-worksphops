@@ -1,0 +1,27 @@
+# -----------------------------------------------------------------------------
+# EN: SOLUTION — refactor.tf at the end of Lab 3.A-AWS.
+# FR: SOLUTION — refactor.tf à la fin du lab 3.A-AWS.
+# -----------------------------------------------------------------------------
+
+# EN: Step 4 — rename an address WITHOUT destroying the resource.
+#     Keep `moved` blocks until every copy of the state (every environment,
+#     every teammate's branch) has been applied, then delete them.
+# FR: Étape 4 — renommer une adresse SANS détruire la ressource.
+#     Gardez les blocs `moved` jusqu'à ce que chaque copie de l'état (chaque
+#     environnement, chaque branche) ait été appliquée, puis supprimez-les.
+moved {
+  from = aws_ssm_parameter.legacy
+  to   = aws_ssm_parameter.app_config
+}
+
+# EN: Step 6 — stop managing the SG but DO NOT destroy it (another team owns
+#     it now). Terraform forgets it; AWS keeps it.
+# FR: Étape 6 — cesser de gérer le SG sans le DÉTRUIRE (une autre équipe en
+#     est maintenant responsable). Terraform l'oublie ; AWS le conserve.
+removed {
+  from = aws_security_group.legacy
+
+  lifecycle {
+    destroy = false
+  }
+}

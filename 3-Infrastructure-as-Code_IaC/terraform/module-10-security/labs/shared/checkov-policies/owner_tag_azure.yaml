@@ -1,0 +1,18 @@
+# EN: Custom policy: Azure resources of these types must carry an Owner tag.
+# FR : Politique personnalisée : les ressources Azure de ces types doivent avoir une étiquette Owner.
+metadata:
+  id: "CKV2_TFLAB_3"
+  name: "Azure resources must have an Owner tag / Les ressources Azure doivent avoir une étiquette Owner"
+  category: "GENERAL_SECURITY"
+  severity: "MEDIUM"
+definition:
+  cond_type: "attribute"
+  resource_types:
+    - "azurerm_resource_group"
+    - "azurerm_storage_account"
+    - "azurerm_key_vault"
+    - "azurerm_linux_virtual_machine"
+    - "azurerm_network_security_group"
+    - "azurerm_virtual_network"
+  attribute: "tags.Owner"
+  operator: "exists"

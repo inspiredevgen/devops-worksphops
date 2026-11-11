@@ -1,0 +1,12 @@
+# EN: Copy to terraform.tfvars and edit. terraform.tfvars is git-ignored.
+# FR: Copiez vers terraform.tfvars et modifiez. terraform.tfvars est ignoré par git.
+
+subscription_id = "00000000-0000-0000-0000-000000000000"
+location        = "canadacentral"
+monthly_limit   = 10
+alert_emails    = ["you@example.com"]
+
+actual_thresholds_pct = {
+  warning  = 50
+  critical = 80
+}

@@ -1,0 +1,8 @@
+# EN: Checkov configuration, auto-loaded when you run checkov from THIS folder.
+# FR : Configuration de Checkov, chargée automatiquement quand vous lancez checkov depuis CE dossier.
+framework:
+  - terraform
+compact: true
+quiet: true
+external-checks-dir:
+  - ../../shared/checkov-policies

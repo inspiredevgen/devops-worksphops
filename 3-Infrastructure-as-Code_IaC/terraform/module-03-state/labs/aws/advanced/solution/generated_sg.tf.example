@@ -1,0 +1,52 @@
+# -----------------------------------------------------------------------------
+# EN: REFERENCE — roughly what `terraform plan -generate-config-out` produces
+#     for the security group, AFTER clean-up. Your generated file will list
+#     every attribute (many with null or default values) — that is normal.
+#     Clean-up checklist:
+#       • replace the hard-coded vpc_id with a data source or variable
+#       • remove arguments that conflict (e.g. name_prefix when name is set)
+#       • keep the egress rule AWS created by default, or plan will delete it
+#       • run `terraform plan` until it shows only the import (+ tag updates)
+# FR: RÉFÉRENCE — à peu près ce que `terraform plan -generate-config-out`
+#     produit pour le groupe de sécurité, APRÈS nettoyage. Votre fichier généré
+#     listera tous les attributs (beaucoup à null ou par défaut) — c'est normal.
+#     Liste de nettoyage :
+#       • remplacer le vpc_id codé en dur par une source de données ou une variable
+#       • retirer les arguments en conflit (ex. name_prefix quand name est défini)
+#       • garder la règle egress créée par défaut par AWS, sinon le plan la supprimera
+#       • relancer `terraform plan` jusqu'à ne voir que l'import (+ mises à jour d'étiquettes)
+# -----------------------------------------------------------------------------
+
+data "aws_vpc" "default" {
+  default = true
+}
+
+resource "aws_security_group" "legacy" {
+  name        = "tf-lab-m03-legacy-sg"
+  description = "Legacy SG created by hand"
+  vpc_id      = data.aws_vpc.default.id
+
+  ingress {
+    description      = ""
+    from_port        = 443
+    to_port          = 443
+    protocol         = "tcp"
+    cidr_blocks      = ["10.0.0.0/8"]
+    ipv6_cidr_blocks = []
+    prefix_list_ids  = []
+    security_groups  = []
+    self             = false
+  }
+
+  egress {
+    description      = ""
+    from_port        = 0
+    to_port          = 0
+    protocol         = "-1"
+    cidr_blocks      = ["0.0.0.0/0"]
+    ipv6_cidr_blocks = []
+    prefix_list_ids  = []
+    security_groups  = []
+    self             = false
+  }
+}

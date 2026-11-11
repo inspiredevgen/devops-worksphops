@@ -1,0 +1,39 @@
+# -----------------------------------------------------------------------------
+# EN: SOLUTION — main.tf at the END of Lab 3.A-AWS (after steps 3-6).
+#     Extension .solution so Terraform never loads it by accident.
+# FR: SOLUTION — main.tf à la FIN du lab 3.A-AWS (après les étapes 3 à 6).
+#     Extension .solution pour que Terraform ne la charge jamais par erreur.
+# -----------------------------------------------------------------------------
+
+resource "aws_s3_bucket" "legacy" {
+  bucket = var.legacy_bucket_name
+
+  tags = {
+    Owner = "clickops"
+    App   = "legacy"
+  }
+}
+
+resource "aws_s3_bucket_versioning" "legacy" {
+  bucket = aws_s3_bucket.legacy.id
+
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+# EN: Renamed from aws_ssm_parameter.legacy (see refactor.tf).
+# FR: Renommé depuis aws_ssm_parameter.legacy (voir refactor.tf).
+resource "aws_ssm_parameter" "app_config" {
+  name = "/tf-lab/m03/legacy-config"
+  type = "String"
+  value = jsonencode({
+    log_level       = "info"
+    max_connections = 50
+  })
+}
+
+# EN: The security group block was DELETED in step 6 — see the `removed`
+#     block in refactor.tf. generated_sg.tf was deleted too.
+# FR: Le bloc du groupe de sécurité a été SUPPRIMÉ à l'étape 6 — voir le bloc
+#     `removed` dans refactor.tf. generated_sg.tf a aussi été supprimé.

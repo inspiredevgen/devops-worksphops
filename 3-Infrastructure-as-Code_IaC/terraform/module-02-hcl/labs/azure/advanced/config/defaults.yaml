@@ -1,0 +1,7 @@
+# EN: Organisation-wide defaults, owned by the platform team.
+# FR: Valeurs par défaut de l'organisation, gérées par l'équipe plateforme.
+settings:
+  log_level: info
+  timeout_seconds: "30"
+  feature_beta: "false"
+  region_label: canada

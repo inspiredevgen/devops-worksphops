@@ -1,0 +1,10 @@
+# EN: Copy to terraform.tfvars and edit. terraform.tfvars is git-ignored.
+# FR: Copiez vers terraform.tfvars et modifiez. terraform.tfvars est ignoré par git.
+
+subscription_id      = "00000000-0000-0000-0000-000000000000"
+sp_display_name      = "sp-terraform-lab"
+role_definition_name = "Contributor"
+secret_rotation_days = 90
+
+# EN: Optional — restrict to one resource group / FR: Optionnel — limiter à un groupe de ressources
+# assignment_scope_id = "/subscriptions/<sub-id>/resourceGroups/rg-tf-lab"

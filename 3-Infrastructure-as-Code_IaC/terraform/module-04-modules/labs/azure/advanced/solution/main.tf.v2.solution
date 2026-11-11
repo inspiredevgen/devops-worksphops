@@ -1,0 +1,48 @@
+# -----------------------------------------------------------------------------
+# EN: SOLUTION — live/main.tf after upgrading to network v2.0.0
+#     (variable blocks unchanged and omitted here).
+# FR: SOLUTION — live/main.tf après la mise à niveau vers network v2.0.0
+#     (blocs de variables inchangés et omis ici).
+# -----------------------------------------------------------------------------
+
+resource "azurerm_resource_group" "platform" {
+  name     = "rg-tf-lab-m04-platform"
+  location = var.location
+
+  tags = {
+    course = "terraform-cloud-engineer"
+    module = "04-modules"
+  }
+}
+
+module "network" {
+  source = "git::https://github.com/<YOUR-GITHUB-USER>/terraform-azurerm-network.git?ref=v2.0.0"
+
+  name                = "tf-lab-m04-platform"
+  resource_group_name = azurerm_resource_group.platform.name
+  location            = azurerm_resource_group.platform.location
+  vnet_cidr           = "10.82.0.0/16"                 # EN: renamed in v2 / FR: renommé en v2
+  subnet_names        = ["app", "data"]
+  service_endpoints   = ["Microsoft.Storage"]          # EN: added in v1.1.0 / FR: ajouté en v1.1.0
+}
+
+module "data_storage" {
+  source = "./modules/private-storage"
+
+  name_prefix         = "tflabm04data"
+  resource_group_name = azurerm_resource_group.platform.name
+  location            = azurerm_resource_group.platform.location
+
+  allowed_subnet_ids = [module.network.subnet_ids["data"]]
+  admin_ip_rules     = [var.my_ip]
+}
+
+output "subnet_ids" {
+  description = "EN: Subnet IDs / FR: ID des sous-réseaux"
+  value       = module.network.subnet_ids
+}
+
+output "storage_account_name" {
+  description = "EN: Data storage account / FR: Compte de stockage des données"
+  value       = module.data_storage.storage_account_name
+}

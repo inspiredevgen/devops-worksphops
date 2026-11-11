@@ -1,0 +1,96 @@
+# =============================================================================
+# 01 · Hello OIDC: prove the keyless login works, and see WHY the trust policy allows it.
+# 01 · Bonjour OIDC : prouver que la connexion sans clé fonctionne, et voir POURQUOI la confiance l'autorise.
+# Run it from the Actions tab (workflow_dispatch). / À lancer depuis l'onglet Actions (workflow_dispatch).
+# =============================================================================
+name: "01 · Hello OIDC"
+
+on:
+  workflow_dispatch:
+
+# EN: Least privilege: nothing by default; each job asks for exactly what it needs.
+# FR : Moindre privilège : rien par défaut ; chaque job demande exactement ce dont il a besoin.
+permissions: {}
+
+jobs:
+  aws:
+    name: "AWS: who am I?"
+    if: vars.AWS_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write # EN: lets the job request a signed OIDC token / FR : permet au job de demander un jeton OIDC signé
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: "The token GitHub will present (claims only) / Le jeton que GitHub présentera (revendications seulement)"
+        run: scripts/ci/show-oidc-claims.sh sts.amazonaws.com
+
+      - name: "Exchange it for AWS credentials / L'échanger contre des identifiants AWS"
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_PLAN_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - run: aws sts get-caller-identity
+
+  aws-denied:
+    name: "AWS: apply role WITHOUT an environment (must fail)"
+    if: vars.AWS_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    continue-on-error: true # EN: a failure here is the lesson / FR : un échec ici est la leçon
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: "Expected: Not authorized to perform sts:AssumeRoleWithWebIdentity"
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_APPLY_ROLE_ARN_PROD }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+  azure:
+    name: "Azure: who am I?"
+    if: vars.AZURE_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: "The token GitHub will present (claims only) / Le jeton que GitHub présentera (revendications seulement)"
+        run: scripts/ci/show-oidc-claims.sh api://AzureADTokenExchange
+
+      - name: "Exchange it for an Entra token / L'échanger contre un jeton Entra"
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_PLAN_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: "What can I see? / Que puis-je voir ?"
+        run: |
+          az account show --query "{subscription: name, identity: user.name, type: user.type}" -o table
+          echo "Resource groups visible to the PLAN identity / Groupes de ressources visibles par l'identité PLAN :"
+          az group list --query "[].name" -o tsv
+
+  azure-denied:
+    name: "Azure: apply identity WITHOUT an environment (must fail)"
+    if: vars.AZURE_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: "Expected: AADSTS700213 No matching federated identity record found"
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_APPLY_CLIENT_ID_PROD }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}

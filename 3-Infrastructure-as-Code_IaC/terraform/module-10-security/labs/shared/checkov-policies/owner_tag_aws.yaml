@@ -1,0 +1,23 @@
+# EN: Custom policy: every AWS resource of these types must carry an Owner tag.
+#     ⚠️ LIMIT: Checkov reads CODE, so it does NOT see tags added by the provider's default_tags.
+#     Lab 10.A checks tags on the PLAN (tags_all), which does.
+# FR : Politique personnalisée : chaque ressource AWS de ces types doit avoir une étiquette Owner.
+#     ⚠️ LIMITE : Checkov lit le CODE, il ne voit donc PAS les étiquettes ajoutées par default_tags du provider.
+#     Le lab 10.A vérifie les étiquettes sur le PLAN (tags_all), qui les voit.
+metadata:
+  id: "CKV2_TFLAB_1"
+  name: "AWS resources must have an Owner tag / Les ressources AWS doivent avoir une étiquette Owner"
+  category: "GENERAL_SECURITY"
+  severity: "MEDIUM"
+definition:
+  cond_type: "attribute"
+  resource_types:
+    - "aws_s3_bucket"
+    - "aws_instance"
+    - "aws_security_group"
+    - "aws_kms_key"
+    - "aws_cloudwatch_log_group"
+    - "aws_iam_policy"
+    - "aws_iam_role"
+  attribute: "tags.Owner"
+  operator: "exists"

@@ -1,0 +1,17 @@
+# EN: ROOT module: configures the provider and pins versions.
+# FR: Module RACINE : configure le provider et épingle les versions.
+terraform {
+  required_version = ">= 1.10.0, < 2.0.0"
+
+  required_providers {
+    azurerm = {
+      source  = "hashicorp/azurerm"
+      version = "~> 4.0"
+    }
+  }
+}
+
+provider "azurerm" {
+  features {}
+  subscription_id = var.subscription_id
+}

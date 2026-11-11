@@ -1,0 +1,23 @@
+# EN: Dependency updates arrive as pull requests, so they go through the SAME checks (Module 10, supply chain).
+# FR : Les mises à jour arrivent en pull requests et passent donc par les MÊMES vérifications (module 10).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: terraform
+    directories:
+      - "/infra/aws/app"
+      - "/infra/aws/envs/*"
+      - "/infra/azure/app"
+      - "/infra/azure/envs/*"
+    schedule:
+      interval: weekly
+    groups:
+      providers:
+        patterns: ["*"]

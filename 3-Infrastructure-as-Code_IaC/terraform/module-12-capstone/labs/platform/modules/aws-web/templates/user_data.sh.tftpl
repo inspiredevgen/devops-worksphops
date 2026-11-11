@@ -1,0 +1,32 @@
+#!/bin/bash
+# -----------------------------------------------------------------------------
+# EN: First-boot script (cloud-init). Terraform placeholders use a single dollar;
+#     bash variables with braces are written with a DOUBLE dollar in this file.
+# FR : Script de premier démarrage (cloud-init). Les emplacements Terraform utilisent
+#     un seul dollar ; les variables bash avec accolades s'écrivent avec un DOUBLE dollar ici.
+# -----------------------------------------------------------------------------
+set -euxo pipefail
+
+dnf install -y nginx
+
+TOKEN=$(curl -sSf -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 300")
+md() { curl -sSf -H "X-aws-ec2-metadata-token: $${TOKEN}" "http://169.254.169.254/latest/meta-data/$1"; }
+INSTANCE_ID=$(md instance-id)
+AZ=$(md placement/availability-zone)
+REGION=$(md placement/region)
+
+cat > /usr/share/nginx/html/index.html <<HTML
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8"><title>Capstone · AWS</title></head>
+  <body style="font-family: sans-serif; margin: 3rem; border-top: 8px solid #ff9900; padding-top: 1rem;">
+    <h1>Terraform capstone / Projet final</h1>
+    <p>Cloud: AWS</p>
+    <p>Environment: ${environment} · Version: ${app_version}</p>
+    <p>Region: $${REGION} · AZ: $${AZ} · Instance: $${INSTANCE_ID}</p>
+  </body>
+</html>
+HTML
+
+echo "ok" > /usr/share/nginx/html/healthz
+systemctl enable --now nginx

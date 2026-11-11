@@ -1,0 +1,36 @@
+#!/bin/bash
+# -----------------------------------------------------------------------------
+# EN: Rendered by Terraform's templatefile(), then run ONCE by cloud-init as
+#     root on first boot. Logs: /var/log/cloud-init-output.log
+#     ⚠️ Dollar + brace is a TERRAFORM placeholder. For a BASH variable with
+#        braces, write it with a DOUBLE dollar in this file: $${VAR}
+#        (look at the rendered output: Terraform keeps a single dollar).
+# FR: Rendu par templatefile() de Terraform, puis exécuté UNE fois par
+#     cloud-init en root au premier démarrage. Journaux : /var/log/cloud-init-output.log
+#     ⚠️ Dollar + accolade est un emplacement TERRAFORM. Pour une variable
+#        BASH avec accolades, écrivez-la avec un DOUBLE dollar dans ce fichier :
+#        $${VAR} (dans le rendu, Terraform ne garde qu'un seul dollar).
+# -----------------------------------------------------------------------------
+set -euxo pipefail
+
+dnf install -y nginx
+
+# EN: IMDSv2: get a token, then the instance ID.
+# FR: IMDSv2 : obtenir un jeton, puis l'ID de l'instance.
+TOKEN=$(curl -sX PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 300")
+INSTANCE_ID=$(curl -s -H "X-aws-ec2-metadata-token: $${TOKEN}" http://169.254.169.254/latest/meta-data/instance-id)
+
+cat > /usr/share/nginx/html/index.html <<HTML
+<!doctype html>
+<html>
+  <head><meta charset="utf-8"><title>${title}</title></head>
+  <body style="font-family: sans-serif; margin: 3rem;">
+    <h1>${title}</h1>
+    <p>${message}</p>
+    <p>Instance: <code>$${INSTANCE_ID}</code></p>
+    <p>Bootstrapped by / Initialisé par : user_data + cloud-init</p>
+  </body>
+</html>
+HTML
+
+systemctl enable --now nginx
