@@ -1,0 +1,229 @@
+# =============================================================================
+# 02 · Pull request checks: quality → plan (read-only identity) → policy gate → sticky PR comment.
+# 02 · Vérifications de pull request : qualité → plan (identité en lecture seule) → porte de politiques → commentaire.
+# Nothing is ever applied from a pull request. / Rien n'est jamais appliqué depuis une pull request.
+# =============================================================================
+name: "02 · PR checks"
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "infra/**"
+      - "policies/**"
+      - "scripts/ci/**"
+      - ".tflint.hcl"
+      - ".github/workflows/02-pr-checks.yml"
+
+permissions: {}
+
+# EN: A new push to the same PR cancels the previous run (plans are read-only, so that's safe).
+# FR : Un nouveau push sur la même PR annule l'exécution précédente (les plans sont en lecture seule : sans risque).
+concurrency:
+  group: pr-checks-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "0"
+  TF_VERSION: "~1.14.0"
+
+jobs:
+  # --------------------------------------------------------------- no cloud
+  quality:
+    name: "Quality: fmt, validate, tflint, checkov, policy tests"
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: fmt
+        run: terraform fmt -check -recursive -diff infra
+
+      - name: validate (every root, no backend / chaque racine, sans backend)
+        run: |
+          for dir in infra/*/app infra/*/envs/*; do
+            echo "::group::${dir}"
+            terraform -chdir="${dir}" init -backend=false -input=false >/dev/null
+            terraform -chdir="${dir}" validate
+            echo "::endgroup::"
+          done
+
+      - uses: terraform-linters/setup-tflint@6ffdbaa3be476b3431f7275c26966ef32ff60337 # v6.3.2
+        with:
+          tflint_version: v0.66.0
+
+      - name: tflint
+        env:
+          GITHUB_TOKEN: ${{ github.token }} # EN: avoids API rate limits when downloading rulesets / FR : évite les limites de l'API
+        run: |
+          tflint --init --config "${GITHUB_WORKSPACE}/.tflint.hcl"
+          tflint --chdir=infra --recursive --config "${GITHUB_WORKSPACE}/.tflint.hcl" --format compact
+
+      - name: checkov (report only for infra; strict for workflows)
+        run: |
+          pipx install checkov==3.4.4
+          checkov -d infra --framework terraform --quiet --compact --soft-fail
+          checkov -d .github/workflows --framework github_actions --quiet --compact
+
+      - name: policy unit tests / tests unitaires des politiques
+        run: |
+          scripts/ci/install-conftest.sh
+          conftest verify -p policies
+
+  # --------------------------------------------------------------- AWS plan
+  plan-aws:
+    name: "Plan · AWS · infra/aws/app"
+    needs: quality
+    if: vars.AWS_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write # EN: OIDC → plan role / FR : OIDC → rôle plan
+      pull-requests: write # EN: the sticky comment / FR : le commentaire persistant
+    defaults:
+      run:
+        working-directory: infra/aws/app
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_PLAN_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: init
+        env:
+          STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+          STATE_REGION: ${{ vars.AWS_REGION }}
+        run: |
+          terraform init \
+            -backend-config="bucket=${STATE_BUCKET}" \
+            -backend-config="key=module-11/aws/app.tfstate" \
+            -backend-config="region=${STATE_REGION}" \
+            -backend-config="use_lockfile=true"
+
+      - name: plan
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+        run: ../../../scripts/ci/plan.sh
+
+      - name: policy gate / porte de politiques
+        id: policy
+        continue-on-error: true # EN: comment first, fail at the end / FR : commenter d'abord, échouer à la fin
+        run: |
+          ../../../scripts/ci/install-conftest.sh
+          set -o pipefail
+          conftest test plan.json -p "${GITHUB_WORKSPACE}/policies" --no-color | tee policy.txt
+
+      - name: comment on the PR / commenter la PR
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          POLICY_OUTCOME: ${{ steps.policy.outcome }}
+        with:
+          script: |
+            const post = require(`${process.env.GITHUB_WORKSPACE}/scripts/ci/pr-comment.js`);
+            await post({ github, context, core }, {
+              marker: 'tf-plan-aws-app',
+              title: 'AWS · infra/aws/app',
+              planFile: 'infra/aws/app/plan.txt',
+              policyFile: 'infra/aws/app/policy.txt',
+              policyOutcome: process.env.POLICY_OUTCOME,
+            });
+
+      - name: fail if the policy gate failed / échouer si la porte a échoué
+        if: steps.policy.outcome == 'failure'
+        run: |
+          echo "::error::Policy gate denied this plan / La porte de politiques a refusé ce plan"
+          exit 1
+
+  # ------------------------------------------------------------- Azure plan
+  plan-azure:
+    name: "Plan · Azure · infra/azure/app"
+    needs: quality
+    if: vars.AZURE_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+    defaults:
+      run:
+        working-directory: infra/azure/app
+    env:
+      # EN: The azurerm provider AND backend fetch the OIDC token themselves: no azure/login needed.
+      # FR : Le provider ET le backend azurerm récupèrent eux-mêmes le jeton OIDC : azure/login est inutile.
+      ARM_USE_OIDC: "true"
+      ARM_CLIENT_ID: ${{ vars.AZURE_PLAN_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: init
+        env:
+          STATE_RG: ${{ vars.TF_STATE_RG }}
+          STATE_SA: ${{ vars.TF_STATE_SA }}
+          STATE_CONTAINER: ${{ vars.TF_STATE_CONTAINER }}
+        run: |
+          terraform init \
+            -backend-config="resource_group_name=${STATE_RG}" \
+            -backend-config="storage_account_name=${STATE_SA}" \
+            -backend-config="container_name=${STATE_CONTAINER}" \
+            -backend-config="key=module-11/azure/app.tfstate" \
+            -backend-config="use_oidc=true" \
+            -backend-config="use_azuread_auth=true"
+
+      - name: plan
+        run: ../../../scripts/ci/plan.sh
+
+      - name: policy gate / porte de politiques
+        id: policy
+        continue-on-error: true
+        run: |
+          ../../../scripts/ci/install-conftest.sh
+          set -o pipefail
+          conftest test plan.json -p "${GITHUB_WORKSPACE}/policies" --no-color | tee policy.txt
+
+      - name: comment on the PR / commenter la PR
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          POLICY_OUTCOME: ${{ steps.policy.outcome }}
+        with:
+          script: |
+            const post = require(`${process.env.GITHUB_WORKSPACE}/scripts/ci/pr-comment.js`);
+            await post({ github, context, core }, {
+              marker: 'tf-plan-azure-app',
+              title: 'Azure · infra/azure/app',
+              planFile: 'infra/azure/app/plan.txt',
+              policyFile: 'infra/azure/app/policy.txt',
+              policyOutcome: process.env.POLICY_OUTCOME,
+            });
+
+      - name: fail if the policy gate failed / échouer si la porte a échoué
+        if: steps.policy.outcome == 'failure'
+        run: |
+          echo "::error::Policy gate denied this plan / La porte de politiques a refusé ce plan"
+          exit 1

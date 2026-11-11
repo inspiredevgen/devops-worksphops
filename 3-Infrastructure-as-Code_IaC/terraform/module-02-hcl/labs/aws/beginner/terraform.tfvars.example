@@ -1,0 +1,7 @@
+# EN: Copy to terraform.tfvars — Terraform loads that file automatically.
+# FR: Copiez vers terraform.tfvars — Terraform charge ce fichier automatiquement.
+
+project_name               = "hcl-lab"
+instance_type              = "t3.micro"
+root_volume_size_gb        = 8
+enable_detailed_monitoring = false

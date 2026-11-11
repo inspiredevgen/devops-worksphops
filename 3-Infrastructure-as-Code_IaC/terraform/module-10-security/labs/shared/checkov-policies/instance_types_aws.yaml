@@ -1,0 +1,17 @@
+# EN: Custom policy: only approved, cost-controlled instance types. / FR : Seulement des types d'instance approuvés, au coût maîtrisé.
+metadata:
+  id: "CKV2_TFLAB_2"
+  name: "EC2 instance type must be approved / Le type d'instance EC2 doit être approuvé"
+  category: "GENERAL_SECURITY"
+  severity: "LOW"
+definition:
+  cond_type: "attribute"
+  resource_types:
+    - "aws_instance"
+  attribute: "instance_type"
+  operator: "within"
+  value:
+    - "t3.micro"
+    - "t3.small"
+    - "t4g.micro"
+    - "t4g.small"

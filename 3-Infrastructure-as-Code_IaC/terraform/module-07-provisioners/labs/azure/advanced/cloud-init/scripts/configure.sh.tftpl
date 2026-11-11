@@ -1,0 +1,14 @@
+#!/bin/bash
+# EN: Part 2 of the multi-part document: runs in cloud-init's FINAL stage,
+#     i.e. AFTER the packages from part 1 are installed.
+# FR: Partie 2 du document multi-parties : s'exécute à l'étape FINALE de
+#     cloud-init, donc APRÈS l'installation des paquets de la partie 1.
+set -euxo pipefail
+
+# EN: Azure Instance Metadata Service (IMDS) — the VM's own region.
+# FR: Azure Instance Metadata Service (IMDS) — la région de la VM.
+REGION=$(curl -s -H "Metadata: true" "http://169.254.169.254/metadata/instance/compute/location?api-version=2021-02-01&format=text")
+
+sed "s/__REGION__/$${REGION}/" /opt/tf-lab/index.html > /var/www/html/index.html
+echo "ok" > /var/www/html/healthz
+echo "${environment} configured at $(date -u +%FT%TZ)" >> /var/log/tf-lab-bootstrap.log

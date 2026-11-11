@@ -1,0 +1,8 @@
+# EN: Copy to terraform.tfvars — Terraform loads that file automatically.
+# FR: Copiez vers terraform.tfvars — Terraform charge ce fichier automatiquement.
+
+project_name        = "hcl-lab"
+vm_size             = "Standard_B1s"
+admin_username      = "azureuser"
+ssh_public_key_path = "~/.ssh/id_rsa.pub"
+os_disk_size_gb     = 30

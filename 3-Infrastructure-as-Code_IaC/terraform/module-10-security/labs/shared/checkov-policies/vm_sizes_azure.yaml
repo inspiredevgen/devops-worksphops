@@ -1,0 +1,16 @@
+# EN: Custom policy: only approved VM sizes. / FR : Seulement des tailles de VM approuvées.
+metadata:
+  id: "CKV2_TFLAB_4"
+  name: "Azure VM size must be approved / La taille de VM Azure doit être approuvée"
+  category: "GENERAL_SECURITY"
+  severity: "LOW"
+definition:
+  cond_type: "attribute"
+  resource_types:
+    - "azurerm_linux_virtual_machine"
+  attribute: "size"
+  operator: "within"
+  value:
+    - "Standard_B1s"
+    - "Standard_B2s"
+    - "Standard_B2ats_v2"

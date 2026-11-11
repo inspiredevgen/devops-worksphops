@@ -1,0 +1,29 @@
+#cloud-config
+# -----------------------------------------------------------------------------
+# EN: A DECLARATIVE cloud-init document (YAML), rendered by templatefile()
+#     and passed as custom_data. cloud-init runs it ONCE at first boot.
+#     Logs on the VM: /var/log/cloud-init-output.log
+# FR: Un document cloud-init DÉCLARATIF (YAML), rendu par templatefile()
+#     et transmis via custom_data. cloud-init l'exécute UNE fois au premier
+#     démarrage. Journaux sur la VM : /var/log/cloud-init-output.log
+# -----------------------------------------------------------------------------
+package_update: true
+packages:
+  - nginx
+
+write_files:
+  - path: /var/www/html/index.html
+    permissions: "0644"
+    content: |
+      <!doctype html>
+      <html>
+        <head><meta charset="utf-8"><title>${title}</title></head>
+        <body style="font-family: sans-serif; margin: 3rem;">
+          <h1>${title}</h1>
+          <p>${message}</p>
+          <p>Bootstrapped by / Initialisé par : custom_data + cloud-init</p>
+        </body>
+      </html>
+
+runcmd:
+  - systemctl enable --now nginx

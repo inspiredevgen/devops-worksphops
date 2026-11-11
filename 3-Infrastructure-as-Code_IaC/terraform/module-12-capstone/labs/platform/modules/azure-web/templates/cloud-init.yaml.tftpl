@@ -1,0 +1,47 @@
+#cloud-config
+# -----------------------------------------------------------------------------
+# EN: First boot only: install nginx and STAGE a render script. The page itself is written by the
+#     scale set's Custom Script EXTENSION, which re-runs on every app_version change (rolling upgrade).
+#     custom_data alone can't do that: Azure applies it only to new or reimaged instances.
+#     /healthz appears only after the first render, so the LB never sends users nginx's default page.
+# FR : Premier démarrage seulement : installer nginx et DÉPOSER un script de rendu. La page est écrite par
+#     l'EXTENSION Custom Script du scale set, relancée à chaque changement d'app_version (mise à niveau progressive).
+#     custom_data seul ne le peut pas : Azure ne l'applique qu'aux instances nouvelles ou réimagées.
+#     /healthz n'apparaît qu'après le premier rendu : l'équilibreur n'envoie jamais la page par défaut de nginx.
+# -----------------------------------------------------------------------------
+package_update: true
+packages:
+  - nginx
+  - jq
+
+write_files:
+  - path: /opt/capstone/index.html.tpl
+    permissions: "0644"
+    content: |
+      <!doctype html>
+      <html lang="en">
+        <head><meta charset="utf-8"><title>Capstone · Azure</title></head>
+        <body style="font-family: sans-serif; margin: 3rem; border-top: 8px solid #0078d4; padding-top: 1rem;">
+          <h1>Terraform capstone / Projet final</h1>
+          <p>Cloud: Azure</p>
+          <p>Environment: ${environment} · Version: __VERSION__</p>
+          <p>Region: __REGION__ · Zone: __ZONE__ · Instance: __HOST__</p>
+        </body>
+      </html>
+  - path: /opt/capstone/render.sh
+    permissions: "0755"
+    content: |
+      #!/bin/bash
+      # Usage: render.sh <version>   (called by the Custom Script extension)
+      set -euo pipefail
+      VERSION="$1"
+      META=$(curl -s -H Metadata:true "http://169.254.169.254/metadata/instance/compute?api-version=2021-02-01")
+      REGION=$(echo "$META" | jq -r .location)
+      ZONE=$(echo "$META" | jq -r 'if (.zone // "") == "" then "-" else .zone end')
+      sed -e "s/__VERSION__/$VERSION/" -e "s/__REGION__/$REGION/" -e "s/__ZONE__/$ZONE/" -e "s/__HOST__/$(hostname)/" \
+        /opt/capstone/index.html.tpl > /var/www/html/index.html.new
+      mv /var/www/html/index.html.new /var/www/html/index.html
+      echo ok > /var/www/html/healthz
+
+runcmd:
+  - systemctl enable --now nginx

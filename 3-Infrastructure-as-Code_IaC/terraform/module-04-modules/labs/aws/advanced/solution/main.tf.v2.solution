@@ -1,0 +1,38 @@
+# -----------------------------------------------------------------------------
+# EN: SOLUTION — live/main.tf after upgrading to network v2.0.0.
+# FR: SOLUTION — live/main.tf après la mise à niveau vers network v2.0.0.
+# -----------------------------------------------------------------------------
+
+variable "aws_region" {
+  description = "EN: AWS region / FR: Région AWS"
+  type        = string
+  default     = "ca-central-1"
+}
+
+module "network" {
+  source = "git::https://github.com/<YOUR-GITHUB-USER>/terraform-aws-network.git?ref=v2.0.0"
+
+  name     = "tf-lab-m04-platform"
+  vpc_cidr = "10.62.0.0/16" # EN: renamed in v2 / FR: renommé en v2
+  az_count = 2
+
+  enable_s3_endpoint = true # EN: added in v1.1.0 / FR: ajouté en v1.1.0
+}
+
+module "data_bucket" {
+  source = "./modules/private-bucket"
+
+  name_prefix              = "tf-lab-m04-data"
+  restrict_to_vpc_endpoint = true
+  vpc_endpoint_id          = module.network.s3_endpoint_id
+}
+
+output "vpc_id" {
+  description = "EN: VPC ID / FR: ID du VPC"
+  value       = module.network.vpc_id
+}
+
+output "bucket_name" {
+  description = "EN: Data bucket / FR: Compartiment de données"
+  value       = module.data_bucket.bucket_name
+}

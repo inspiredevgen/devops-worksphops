@@ -1,0 +1,79 @@
+# =============================================================================
+# 11 · Promotion: the SAME commit goes to dev, then (after approval) to prod.
+# 11 · Promotion : le MÊME commit va en dev, puis (après approbation) en prod.
+#   dev  : no reviewers → applies automatically / aucun réviseur → s'applique automatiquement
+#   prod : required reviewers + main branch only → waits for a human / réviseurs obligatoires + main seulement → attend un humain
+# =============================================================================
+name: "11 · Promote dev → prod"
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "infra/*/envs/**"
+      - "infra/*/modules/**"
+      - "policies/**"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: promote
+  cancel-in-progress: false
+
+jobs:
+  aws-dev:
+    if: vars.AWS_ENABLED == 'true'
+    uses: ./.github/workflows/10-terraform-env.yml
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      cloud: aws
+      environment: dev
+      working-directory: infra/aws/envs/dev
+      state-key: module-11/aws/dev.tfstate
+      plan-identity: ${{ vars.AWS_PLAN_ROLE_ARN }}
+      apply-identity: ${{ vars.AWS_APPLY_ROLE_ARN_DEV }}
+
+  aws-prod:
+    needs: aws-dev # EN: prod only after dev succeeded / FR : prod seulement après la réussite de dev
+    uses: ./.github/workflows/10-terraform-env.yml
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      cloud: aws
+      environment: prod
+      working-directory: infra/aws/envs/prod
+      state-key: module-11/aws/prod.tfstate
+      plan-identity: ${{ vars.AWS_PLAN_ROLE_ARN }}
+      apply-identity: ${{ vars.AWS_APPLY_ROLE_ARN_PROD }}
+
+  azure-dev:
+    if: vars.AZURE_ENABLED == 'true'
+    uses: ./.github/workflows/10-terraform-env.yml
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      cloud: azure
+      environment: dev
+      working-directory: infra/azure/envs/dev
+      state-key: module-11/azure/dev.tfstate
+      plan-identity: ${{ vars.AZURE_PLAN_CLIENT_ID }}
+      apply-identity: ${{ vars.AZURE_APPLY_CLIENT_ID_DEV }}
+
+  azure-prod:
+    needs: azure-dev
+    uses: ./.github/workflows/10-terraform-env.yml
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      cloud: azure
+      environment: prod
+      working-directory: infra/azure/envs/prod
+      state-key: module-11/azure/prod.tfstate
+      plan-identity: ${{ vars.AZURE_PLAN_CLIENT_ID }}
+      apply-identity: ${{ vars.AZURE_APPLY_CLIENT_ID_PROD }}

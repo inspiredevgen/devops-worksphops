@@ -1,0 +1,99 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.11.0",
+  "planned_values": {},
+  "resource_changes": [
+    {
+      "address": "aws_security_group.app",
+      "mode": "managed",
+      "type": "aws_security_group",
+      "name": "app",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "update"
+        ],
+        "before": {},
+        "after": {
+          "name": "tf-lab-m10-gate-app",
+          "tags": null,
+          "tags_all": {
+            "Course": "terraform-cloud-engineer",
+            "Module": "10-security",
+            "ManagedBy": "terraform"
+          },
+          "ingress": [
+            {
+              "cidr_blocks": [
+                "10.0.0.0/8"
+              ],
+              "from_port": 443,
+              "to_port": 443,
+              "protocol": "tcp"
+            },
+            {
+              "cidr_blocks": [
+                "0.0.0.0/0"
+              ],
+              "from_port": 22,
+              "to_port": 22,
+              "protocol": "tcp"
+            }
+          ]
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "aws_instance.app",
+      "mode": "managed",
+      "type": "aws_instance",
+      "name": "app",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "delete",
+          "create"
+        ],
+        "before": {},
+        "after": {
+          "instance_type": "m5.4xlarge",
+          "tags": null,
+          "tags_all": {
+            "Course": "terraform-cloud-engineer",
+            "Module": "10-security",
+            "ManagedBy": "terraform",
+            "Owner": "platform-team"
+          },
+          "metadata_options": [
+            {
+              "http_tokens": "optional"
+            }
+          ],
+          "root_block_device": [
+            {
+              "encrypted": true
+            }
+          ]
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "aws_s3_bucket.logs",
+      "mode": "managed",
+      "type": "aws_s3_bucket",
+      "name": "logs",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "delete"
+        ],
+        "before": {},
+        "after": null,
+        "after_unknown": {}
+      }
+    }
+  ],
+  "configuration": {}
+}

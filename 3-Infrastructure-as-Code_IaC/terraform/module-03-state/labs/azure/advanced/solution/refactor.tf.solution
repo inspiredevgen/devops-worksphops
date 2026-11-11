@@ -1,0 +1,23 @@
+# -----------------------------------------------------------------------------
+# EN: SOLUTION — refactor.tf at the end of Lab 3.A-AZ. In main.tf, the
+#     resource group block is renamed to "app" and every reference
+#     (azurerm_resource_group.legacy.*) is updated to azurerm_resource_group.app.*;
+#     generated_nsg.tf is deleted.
+# FR: SOLUTION — refactor.tf à la fin du lab 3.A-AZ. Dans main.tf, le bloc du
+#     groupe de ressources est renommé « app » et chaque référence
+#     (azurerm_resource_group.legacy.*) devient azurerm_resource_group.app.* ;
+#     generated_nsg.tf est supprimé.
+# -----------------------------------------------------------------------------
+
+moved {
+  from = azurerm_resource_group.legacy
+  to   = azurerm_resource_group.app
+}
+
+removed {
+  from = azurerm_network_security_group.legacy
+
+  lifecycle {
+    destroy = false
+  }
+}

@@ -1,0 +1,101 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.11.0",
+  "planned_values": {},
+  "resource_changes": [
+    {
+      "address": "aws_security_group.app",
+      "mode": "managed",
+      "type": "aws_security_group",
+      "name": "app",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "name": "tf-lab-m10-gate-app",
+          "tags": null,
+          "tags_all": {
+            "Course": "terraform-cloud-engineer",
+            "Module": "10-security",
+            "ManagedBy": "terraform",
+            "Owner": "platform-team"
+          },
+          "ingress": [
+            {
+              "cidr_blocks": [
+                "10.0.0.0/8"
+              ],
+              "from_port": 443,
+              "to_port": 443,
+              "protocol": "tcp",
+              "description": "HTTPS from the private network"
+            }
+          ]
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "aws_instance.app",
+      "mode": "managed",
+      "type": "aws_instance",
+      "name": "app",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "instance_type": "t3.micro",
+          "tags": null,
+          "tags_all": {
+            "Course": "terraform-cloud-engineer",
+            "Module": "10-security",
+            "ManagedBy": "terraform",
+            "Owner": "platform-team"
+          },
+          "metadata_options": [
+            {
+              "http_tokens": "required"
+            }
+          ],
+          "root_block_device": [
+            {
+              "encrypted": true
+            }
+          ]
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "aws_s3_bucket.data",
+      "mode": "managed",
+      "type": "aws_s3_bucket",
+      "name": "data",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "bucket_prefix": "tf-lab-m10-gate-",
+          "tags": null,
+          "tags_all": {
+            "Course": "terraform-cloud-engineer",
+            "Module": "10-security",
+            "ManagedBy": "terraform",
+            "Owner": "platform-team"
+          }
+        },
+        "after_unknown": {}
+      }
+    }
+  ],
+  "configuration": {}
+}

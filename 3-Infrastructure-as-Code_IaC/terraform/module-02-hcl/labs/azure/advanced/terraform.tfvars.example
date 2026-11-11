@@ -1,0 +1,14 @@
+# EN: Copy to terraform.tfvars. Omitted optional attributes get their defaults.
+# FR: Copiez vers terraform.tfvars. Les attributs optionnels omis prennent leur valeur par défaut.
+
+app = {
+  name        = "My Shop API!"
+  environment = "dev"
+  owner       = "platform-team"
+  ports       = [443, 8443]
+  settings = {
+    log_level = "debug" # EN: overrides defaults.yaml / FR: surcharge defaults.yaml
+  }
+}
+
+vnet_cidr = "10.43.0.0/16"

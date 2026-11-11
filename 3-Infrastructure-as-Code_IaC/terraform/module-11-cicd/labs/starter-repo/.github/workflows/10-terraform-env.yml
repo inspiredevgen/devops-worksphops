@@ -1,0 +1,176 @@
+# =============================================================================
+# 10 · REUSABLE workflow: plan → policy gate → (approval) → apply, for ONE cloud and ONE environment.
+#      Callers: 11-promote.yml. Compare with 03: the same steps, written once.
+# 10 · Workflow RÉUTILISABLE : plan → porte de politiques → (approbation) → apply, pour UN cloud et UN environnement.
+#      Appelants : 11-promote.yml. Comparez avec 03 : les mêmes étapes, écrites une seule fois.
+# =============================================================================
+name: "10 · Terraform environment (reusable)"
+
+on:
+  workflow_call:
+    inputs:
+      cloud:
+        description: "aws | azure"
+        type: string
+        required: true
+      environment:
+        description: "GitHub environment = Terraform environment (dev, prod…)"
+        type: string
+        required: true
+      working-directory:
+        type: string
+        required: true
+      state-key:
+        type: string
+        required: true
+      plan-identity:
+        description: "AWS role ARN or Azure client ID used to PLAN"
+        type: string
+        required: true
+      apply-identity:
+        description: "AWS role ARN or Azure client ID used to APPLY"
+        type: string
+        required: true
+    outputs:
+      changes:
+        value: ${{ jobs.plan.outputs.changes }}
+
+permissions: {}
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "0"
+  TF_VERSION: "~1.14.0"
+  # EN: Inputs go through env, never straight into scripts (no template injection).
+  # FR : Les entrées passent par env, jamais directement dans les scripts (pas d'injection de modèle).
+  CLOUD: ${{ inputs.cloud }}
+  STATE_KEY: ${{ inputs.state-key }}
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+  STATE_RG: ${{ vars.TF_STATE_RG }}
+  STATE_SA: ${{ vars.TF_STATE_SA }}
+  STATE_CONTAINER: ${{ vars.TF_STATE_CONTAINER }}
+  ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+jobs:
+  plan:
+    name: "Plan · ${{ inputs.cloud }}/${{ inputs.environment }}"
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      changes: ${{ steps.plan.outputs.changes }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: AWS login (plan role)
+        if: inputs.cloud == 'aws'
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ inputs.plan-identity }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Azure identity (plan)
+        if: inputs.cloud == 'azure'
+        env:
+          PLAN_CLIENT_ID: ${{ inputs.plan-identity }}
+        run: |
+          {
+            echo "ARM_USE_OIDC=true"
+            echo "ARM_CLIENT_ID=${PLAN_CLIENT_ID}"
+          } >> "$GITHUB_ENV"
+
+      - name: init
+        run: |
+          "${GITHUB_WORKSPACE}/scripts/ci/init.sh"
+
+      - name: plan
+        id: plan
+        run: |
+          "${GITHUB_WORKSPACE}/scripts/ci/plan.sh"
+
+      - name: policy gate (blocking) / porte de politiques (bloquante)
+        run: |
+          "${GITHUB_WORKSPACE}/scripts/ci/install-conftest.sh"
+          conftest test plan.json -p "${GITHUB_WORKSPACE}/policies" --no-color
+
+      - name: upload the plan / téléverser le plan
+        if: steps.plan.outputs.changes == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: tfplan-${{ inputs.cloud }}-${{ inputs.environment }}
+          path: |
+            ${{ inputs.working-directory }}/tfplan
+            ${{ inputs.working-directory }}/.terraform.lock.hcl
+            ${{ inputs.working-directory }}/plan.txt
+          include-hidden-files: true
+          retention-days: 1
+          if-no-files-found: error
+
+  apply:
+    name: "Apply · ${{ inputs.cloud }}/${{ inputs.environment }}"
+    needs: plan
+    if: needs.plan.outputs.changes == 'true'
+    runs-on: ubuntu-24.04
+    # EN: Protection rules live on the GitHub environment (reviewers, wait timer, allowed branches).
+    # FR : Les règles de protection vivent sur l'environnement GitHub (réviseurs, délai, branches autorisées).
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: tfplan-${{ inputs.cloud }}-${{ inputs.environment }}
+          path: ${{ inputs.working-directory }}
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: AWS login (apply role)
+        if: inputs.cloud == 'aws'
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ inputs.apply-identity }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Azure identity (apply)
+        if: inputs.cloud == 'azure'
+        env:
+          APPLY_CLIENT_ID: ${{ inputs.apply-identity }}
+        run: |
+          {
+            echo "ARM_USE_OIDC=true"
+            echo "ARM_CLIENT_ID=${APPLY_CLIENT_ID}"
+          } >> "$GITHUB_ENV"
+
+      - name: init (readonly lock file / fichier de verrouillage en lecture seule)
+        run: |
+          "${GITHUB_WORKSPACE}/scripts/ci/init.sh" -lockfile=readonly
+
+      - name: show what will be applied / montrer ce qui sera appliqué
+        run: cat plan.txt
+
+      - name: apply the saved plan / appliquer le plan enregistré
+        run: terraform apply -input=false tfplan

@@ -1,0 +1,86 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.11.0",
+  "planned_values": {},
+  "resource_changes": [
+    {
+      "address": "azurerm_resource_group.this",
+      "mode": "managed",
+      "type": "azurerm_resource_group",
+      "name": "this",
+      "provider_name": "registry.terraform.io/hashicorp/azurerm",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "name": "rg-tf-lab-m10-gate",
+          "tags": {
+            "Course": "terraform-cloud-engineer",
+            "Module": "10-security",
+            "ManagedBy": "terraform",
+            "Owner": "platform-team"
+          }
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "azurerm_network_security_group.app",
+      "mode": "managed",
+      "type": "azurerm_network_security_group",
+      "name": "app",
+      "provider_name": "registry.terraform.io/hashicorp/azurerm",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "tags": {
+            "Course": "terraform-cloud-engineer",
+            "Module": "10-security",
+            "ManagedBy": "terraform",
+            "Owner": "platform-team"
+          },
+          "security_rule": [
+            {
+              "name": "https-from-vnet",
+              "direction": "Inbound",
+              "access": "Allow",
+              "source_address_prefix": "VirtualNetwork",
+              "destination_port_range": "443"
+            }
+          ]
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "azurerm_linux_virtual_machine.app",
+      "mode": "managed",
+      "type": "azurerm_linux_virtual_machine",
+      "name": "app",
+      "provider_name": "registry.terraform.io/hashicorp/azurerm",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "size": "Standard_B1s",
+          "disable_password_authentication": true,
+          "tags": {
+            "Course": "terraform-cloud-engineer",
+            "Module": "10-security",
+            "ManagedBy": "terraform",
+            "Owner": "platform-team"
+          }
+        },
+        "after_unknown": {}
+      }
+    }
+  ],
+  "configuration": {}
+}

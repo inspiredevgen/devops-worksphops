@@ -1,0 +1,8 @@
+# EN: With branch protection "Require review from Code Owners", these people must approve changes to these paths.
+#     Replace the placeholder with your GitHub username (or a team such as @your-org/platform).
+# FR : Avec la protection de branche « Require review from Code Owners », ces personnes doivent approuver ces chemins.
+#     Remplacez l'espace réservé par votre nom d'utilisateur GitHub (ou une équipe comme @votre-org/platform).
+*                       @YOUR-GITHUB-USERNAME
+/.github/               @YOUR-GITHUB-USERNAME
+/policies/              @YOUR-GITHUB-USERNAME
+/infra/*/envs/prod/     @YOUR-GITHUB-USERNAME
