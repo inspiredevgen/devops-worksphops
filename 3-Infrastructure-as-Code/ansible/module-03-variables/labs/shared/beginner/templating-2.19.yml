@@ -1,0 +1,67 @@
+---
+# =============================================================================
+# EN: What changed in templating with ansible-core 2.19+ (still true in 2.21). Local, free:
+#       ansible-playbook ../../shared/beginner/templating-2.19.yml
+#     Each "BROKEN" task fails ON PURPOSE inside a block; the rescue explains, the "FIXED" task follows.
+# FR : Ce qui a changé dans les modèles avec ansible-core 2.19+ (toujours vrai en 2.21). En local, gratuit.
+#     Chaque tâche « BROKEN » échoue EXPRÈS dans un bloc ; le rescue explique, la tâche « FIXED » suit.
+# =============================================================================
+- name: Templating since ansible-core 2.19
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    servers: [web1, web2]
+    kind: network
+    answer: "{{ 6 * 7 }}"
+
+  tasks:
+    # ------------------------------------------------------------------ 1
+    - name: 1 Conditionals must be booleans
+      block:
+        - name: 1 BROKEN - a list is not a boolean
+          ansible.builtin.debug:
+            msg: never printed
+          when: servers
+      rescue:
+        - name: 1 Explain
+          ansible.builtin.debug:
+            msg: "Failed as expected: {{ ansible_failed_result.msg | regex_search('Conditionals must have a boolean result') }}"
+
+    - name: 1 FIXED - say what you mean
+      ansible.builtin.debug:
+        msg: "{{ servers | length }} servers"
+      when: servers | length > 0
+
+    # ------------------------------------------------------------------ 2
+    - name: 2 A non-empty string is not "true" either
+      block:
+        - name: 2 BROKEN - when on a string
+          ansible.builtin.debug:
+            msg: never printed
+          when: kind
+      rescue:
+        - name: 2 Explain
+          ansible.builtin.debug:
+            msg: "Failed as expected: a string is not a boolean"
+
+    - name: 2 FIXED - compare explicitly
+      ansible.builtin.debug:
+        msg: "kind is {{ kind }}"
+      when: kind == 'network'
+
+    # ------------------------------------------------------------------ 3
+    - name: 3 Templates keep their native type
+      ansible.builtin.debug:
+        msg: "answer = {{ answer }} ({{ answer | type_debug }}): an int, not the string '42'"
+
+    # ------------------------------------------------------------------ 4
+    - name: 4 Data coming FROM hosts is never rendered as a template
+      ansible.builtin.command: echo "{{ '{{' }} 6 * 7 {{ '}}' }}"
+      register: remote_text
+      changed_when: false
+
+    - name: 4 The braces stay text (no template injection from module output)
+      ansible.builtin.debug:
+        msg: "stdout = {{ remote_text.stdout }}"

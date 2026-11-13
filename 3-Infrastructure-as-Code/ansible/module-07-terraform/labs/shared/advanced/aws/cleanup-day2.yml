@@ -1,0 +1,55 @@
+---
+# =============================================================================
+# Lab 7.A-AWS — Remove what the day-2 playbooks created. Terraform never knew about these snapshots and AMIs,
+#   so "terraform destroy" leaves them behind, and they are billed every month. Run this BEFORE destroying.
+#   ansible-playbook ../../shared/advanced/aws/cleanup-day2.yml
+# Lab 7.A-AWS — Supprimer ce que les playbooks de jour 2 ont créé. Terraform ne connaît pas ces instantanés et AMI :
+#   « terraform destroy » les laisse, et ils sont facturés chaque mois. À lancer AVANT la destruction.
+# =============================================================================
+- name: Clean up day-2 artifacts
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    aws_region: ca-central-1
+
+  tasks:
+    - name: Find our golden AMIs
+      amazon.aws.ec2_ami_info:
+        owners: [self]
+        filters:
+          "tag:Course": ansible-cloud-engineer
+          "tag:Purpose": golden
+        region: "{{ aws_region }}"
+      register: golden_images
+
+    - name: Deregister them, with their snapshots
+      amazon.aws.ec2_ami:
+        image_id: "{{ item.image_id }}"
+        state: absent
+        delete_snapshot: true
+        region: "{{ aws_region }}"
+      loop: "{{ golden_images.images }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Find our pre-patch snapshots
+      amazon.aws.ec2_snapshot_info:
+        filters:
+          "tag:Course": ansible-cloud-engineer
+          "tag:Purpose": pre-patch
+        region: "{{ aws_region }}"
+      register: pre_patch
+
+    - name: Delete them
+      amazon.aws.ec2_snapshot:
+        snapshot_id: "{{ item.snapshot_id }}"
+        state: absent
+        region: "{{ aws_region }}"
+      loop: "{{ pre_patch.snapshots }}"
+      loop_control:
+        label: "{{ item.snapshot_id }}"
+
+    - name: Nothing billable is left
+      ansible.builtin.debug:
+        msg: "Removed {{ golden_images.images | length }} AMI(s) and {{ pre_patch.snapshots | length }} pre-patch snapshot(s). Now: terraform destroy."

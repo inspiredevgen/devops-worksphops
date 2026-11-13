@@ -1,0 +1,5 @@
+---
+breaking_changes:
+  - web - ``web_root`` has been removed. Rename it to ``web_site_root``. The role now fails with a clear message if ``web_root`` is still set.
+removed_features:
+  - web - the ``web_root`` option, deprecated in 1.1.0.

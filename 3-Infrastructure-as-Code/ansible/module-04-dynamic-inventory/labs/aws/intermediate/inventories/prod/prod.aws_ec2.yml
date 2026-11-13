@@ -1,0 +1,26 @@
+---
+# EN: The prod inventory: ONLY instances tagged Environment=prod. / FR : L'inventaire prod : SEULEMENT les instances étiquetées Environment=prod.
+plugin: amazon.aws.aws_ec2
+regions:
+  - ca-central-1
+filters:
+  tag:Course: ansible-cloud-engineer
+  tag:Environment: prod
+  instance-state-name: running
+hostnames:
+  - tag:Host
+  - instance-id
+compose:
+  ansible_host: public_ip_address | default(private_ip_address, true)
+  ansible_user: "'ec2-user' if ec2_tags.OS == 'al2023' else 'ubuntu'"
+  cloud: "'aws'"
+  # EN: The tag contract, normalised: the same variable names on every cloud. / FR : Le contrat d'étiquettes, normalisé.
+  env_tag: ec2_tags.Environment | default('')
+  role_tag: ec2_tags.Role | default('')
+keyed_groups:
+  - key: ec2_tags.Role
+    prefix: role
+  - key: ec2_tags.OS
+    prefix: os
+use_deprecated_tags: false
+strict: true

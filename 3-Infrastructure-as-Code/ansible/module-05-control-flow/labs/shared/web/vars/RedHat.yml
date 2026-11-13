@@ -1,0 +1,7 @@
+---
+# EN: Amazon Linux 2023, AlmaLinux, RHEL: os_family "RedHat".
+# FR : Amazon Linux 2023, AlmaLinux, RHEL : os_family « RedHat ».
+web_packages: [nginx, curl]
+nginx_user: nginx
+nginx_module_includes: [/usr/share/nginx/modules/*.conf]
+nginx_remove: []

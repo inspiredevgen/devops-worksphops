@@ -1,0 +1,16 @@
+---
+# EN: Copy next to a lab's ansible.cfg (the Azure advanced lab already has one).
+# FR : À copier à côté de l'ansible.cfg d'un lab (le lab Azure avancé en a déjà un).
+ansible-navigator:
+  execution-environment:
+    enabled: true
+    image: localhost/ansible-course-ee:m00
+    pull:
+      policy: never
+    container-options:
+      - "--net=host" # EN: reach the localhost Bastion tunnels / FR : joindre les tunnels Bastion sur localhost
+  mode: stdout
+  playbook-artifact:
+    enable: false
+  logging:
+    level: warning

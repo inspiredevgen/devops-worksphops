@@ -1,0 +1,98 @@
+---
+# =============================================================================
+# EN: Grader for Lab 1.B. It CHANGES NOTHING: it only reads the state your ad-hoc commands created.
+#     ansible-playbook ../../shared/check-day-one.yml
+# FR : Correcteur du lab 1.B. Il NE MODIFIE RIEN : il lit seulement l'état créé par vos commandes ad hoc.
+# =============================================================================
+- name: Verify the day-one state of the fleet
+  hosts: all
+  gather_facts: true
+  become: true
+
+  vars:
+    # EN: Same goal, different names per OS family: Module 3 replaces this with group_vars.
+    # FR : Même but, noms différents selon la famille d'OS : le module 3 remplace ceci par group_vars.
+    cron_service: "{{ 'cron' if ansible_facts['os_family'] == 'Debian' else 'crond' }}"
+
+  tasks:
+    - name: Collect installed packages
+      ansible.builtin.package_facts:
+        manager: auto
+
+    - name: The tools are installed
+      ansible.builtin.assert:
+        that:
+          - "'tree' in ansible_facts['packages']"
+          - "'jq' in ansible_facts['packages']"
+        fail_msg: "Install tree and jq (step 2)."
+        quiet: true
+
+    - name: Read the deploy account
+      ansible.builtin.getent:
+        database: passwd
+        key: deploy
+        fail_key: false
+
+    - name: The deploy account exists with a bash shell
+      ansible.builtin.assert:
+        that:
+          - ansible_facts['getent_passwd']['deploy'] is not none
+          - ansible_facts['getent_passwd']['deploy'][5] == '/bin/bash'
+        fail_msg: "Create the deploy user with shell=/bin/bash (step 4)."
+        quiet: true
+
+    - name: Read deploy's authorized_keys
+      ansible.builtin.stat:
+        path: /home/deploy/.ssh/authorized_keys
+      register: deploy_keys
+
+    - name: The deploy account accepts your key
+      ansible.builtin.assert:
+        that:
+          - deploy_keys.stat.exists
+          - deploy_keys.stat.pw_name == 'deploy'
+          - deploy_keys.stat.mode == '0600'
+        fail_msg: "Add your public key for deploy with ansible.posix.authorized_key (step 4)."
+        quiet: true
+
+    - name: Read the app directory
+      ansible.builtin.stat:
+        path: /opt/ans-lab
+      register: app_dir
+
+    - name: The app directory belongs to deploy
+      ansible.builtin.assert:
+        that:
+          - app_dir.stat.isdir | default(false)
+          - app_dir.stat.pw_name == 'deploy'
+          - app_dir.stat.mode == '0755'
+        fail_msg: "Create /opt/ans-lab owned by deploy, mode 0755 (step 5)."
+        quiet: true
+
+    - name: Read the message of the day
+      ansible.builtin.slurp:
+        src: /etc/motd
+      register: motd
+
+    - name: The message of the day is managed
+      ansible.builtin.assert:
+        that: "'Managed by Ansible' in (motd.content | b64decode)"
+        fail_msg: "Copy the motd content (step 5)."
+        quiet: true
+
+    - name: Collect services
+      ansible.builtin.service_facts:
+      tags: [services]
+
+    - name: The scheduler is running and enabled
+      ansible.builtin.assert:
+        that:
+          - ansible_facts['services'][cron_service ~ '.service']['state'] == 'running'
+          - ansible_facts['services'][cron_service ~ '.service']['status'] == 'enabled'
+        fail_msg: "Start and enable {{ cron_service }} (step 3)."
+        quiet: true
+      tags: [services]
+
+    - name: Report
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }}: day-one state OK ✅"

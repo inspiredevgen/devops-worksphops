@@ -1,0 +1,153 @@
+---
+# =============================================================================
+# Lab 5.A — Zero-downtime rolling release behind a load balancer (AWS ALB or Azure Load Balancer).
+#   One host at a time: drain → deploy → verify on the host → re-enable → verify THROUGH the load balancer.
+#   ansible-playbook ../../shared/advanced/rolling.yml -e release_version=v2 -e lb_address=<terraform output lb_address>
+#   In another terminal, BEFORE starting: ../../shared/advanced/watch-lb.sh <lb_address>
+#   Recovery when the site is already down (the pre-flight check would refuse): add -e force=true
+# Lab 5.A — Livraison progressive sans interruption derrière un équilibreur de charge (ALB AWS ou Azure Load Balancer).
+# =============================================================================
+
+- name: Pre-flight (control node)
+  hosts: role_web
+  gather_facts: false
+
+  tasks:
+    - name: The load balancer address is known
+      ansible.builtin.assert:
+        that: lb_address is defined and lb_address | length > 0
+        fail_msg: "Pass -e lb_address=$(terraform -chdir=<lab-hosts/cloud> output -raw lb_address)"
+        quiet: true
+      run_once: true
+
+    # EN: Don't start a rollout on a site that is already broken… unless this run IS the fix: -e force=true.
+    # FR : Ne pas lancer un déploiement sur un site déjà cassé… sauf si cette exécution EST le correctif : -e force=true.
+    - name: The site answers through the load balancer before we start
+      ansible.builtin.uri:
+        url: "http://{{ lb_address }}/"
+      delegate_to: localhost
+      run_once: true
+      when: not (force | default(false) | bool)
+
+    - name: Show the plan
+      ansible.builtin.debug:
+        msg: >-
+          Rolling {{ release_version }} to {{ ansible_play_hosts_all | length }} web servers,
+          one at a time: {{ ansible_play_hosts_all | sort | join(' → ') }}
+      run_once: true
+
+- name: Rolling release
+  hosts: role_web
+  become: true
+  # EN: ONE host at a time; the FIRST failure stops the rollout (the others keep serving the old release).
+  # FR : UN hôte à la fois ; le PREMIER échec arrête le déploiement (les autres continuent de servir l'ancienne version).
+  serial: 1
+  max_fail_percentage: 0
+  order: sorted
+
+  vars:
+    web_root: /var/www/ans-lab
+    web_templates: "{{ playbook_dir }}/../web/templates"
+    aws_region: ca-central-1
+    lb_target_group: ans-lab-web
+    lb_probe_interval: 5
+    lb_probe_count: 2
+    lb_drain_margin: 5
+
+  pre_tasks:
+    - name: Take this host out of the load balancer
+      ansible.builtin.include_tasks: "tasks/drain-{{ cloud }}.yml"
+
+  tasks:
+    - name: Put the release on disk (not healthy yet)
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/../web/tasks/release.yml"
+      vars:
+        release_mark_healthy: false
+
+    - name: Install the warm-up script
+      ansible.builtin.copy:
+        dest: /usr/local/bin/ans-lab-warmup
+        mode: "0755"
+        content: |
+          #!/bin/sh
+          # Simulates a slow release step (cache warm-up, migrations…): 20 s, then a marker file.
+          sleep 20 && touch "{{ web_root }}/releases/$1/.warm"
+
+    # EN: async + poll: 0 = start it and move on; async_status below waits with a timeout we control.
+    #     Without async, a long task can hit the SSH timeout; with it, you can also do other work meanwhile.
+    # FR : async + poll: 0 = le lancer et continuer ; async_status ci-dessous attend avec un délai maîtrisé.
+    - name: Start the warm-up in the background
+      ansible.builtin.command:
+        cmd: "/usr/local/bin/ans-lab-warmup {{ release_version }}"
+        creates: "{{ web_root }}/releases/{{ release_version }}/.warm"
+      async: 120
+      poll: 0
+      register: warmup
+
+    - name: Wait for the warm-up to finish
+      ansible.builtin.async_status:
+        jid: "{{ warmup.ansible_job_id }}"
+      register: warmup_job
+      until: warmup_job.finished
+      retries: 40
+      delay: 3
+      when: warmup.ansible_job_id is defined
+
+    - name: The new release answers on the host itself
+      ansible.builtin.uri:
+        url: http://127.0.0.1/
+        return_content: true
+      register: local_page
+      until: local_page.status == 200 and release_version in local_page.content
+      retries: 5
+      delay: 2
+
+  post_tasks:
+    - name: Pass the health check again
+      ansible.builtin.copy:
+        dest: "{{ web_root }}/health/ok"
+        content: "ok {{ release_version }}\n"
+        mode: "0644"
+
+    - name: Put this host back in the load balancer
+      ansible.builtin.include_tasks: "tasks/enable-{{ cloud }}.yml"
+
+    # EN: The proof that matters: real requests through the load balancer reach THIS host with THIS release.
+    # FR : La preuve qui compte : de vraies requêtes via l'équilibreur atteignent CET hôte avec CETTE version.
+    - name: This host serves the new release through the load balancer
+      ansible.builtin.uri:
+        url: "http://{{ lb_address }}/"
+        return_content: true
+      register: via_lb
+      until: >-
+        via_lb.status == 200
+        and via_lb.x_served_by | default('') == inventory_hostname
+        and release_version in via_lb.content
+      retries: 60
+      delay: 1
+      delegate_to: localhost
+      become: false
+
+- name: Final check (control node)
+  hosts: role_web
+  gather_facts: false
+
+  tasks:
+    - name: Sample 20 requests through the load balancer
+      ansible.builtin.uri:
+        url: "http://{{ lb_address }}/"
+        return_content: true
+      register: sample
+      loop: "{{ range(20) | list }}"
+      loop_control:
+        label: "request {{ item }}"
+      delegate_to: localhost
+      run_once: true
+
+    - name: Every request got the new release
+      ansible.builtin.assert:
+        that: sample.results | map(attribute='content') | reject('search', release_version) | list | length == 0
+        success_msg: >-
+          20/20 on {{ release_version }}, served by
+          {{ sample.results | map(attribute='x_served_by') | unique | sort | join(', ') }}
+      run_once: true

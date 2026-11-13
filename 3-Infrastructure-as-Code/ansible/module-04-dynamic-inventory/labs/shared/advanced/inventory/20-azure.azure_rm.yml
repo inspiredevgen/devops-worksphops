@@ -1,0 +1,33 @@
+---
+# =============================================================================
+# Lab 4.A — source 2/3: Azure. Translates VM tags into the course's TAG CONTRACT variables.
+# Lab 4.A — source 2/3 : Azure. Traduit les étiquettes des VM dans les variables du CONTRAT D'ÉTIQUETTES du cours.
+# =============================================================================
+plugin: azure.azcollection.azure_rm
+auth_source: cli
+include_vm_resource_groups:
+  - rg-ans-lab-hosts
+exclude_host_filters:
+  - tags.Course | default('') != 'ansible-cloud-engineer'
+plain_host_names: true
+hostnames:
+  - tags.Host | default('')
+  - default
+hostvar_expressions:
+  ansible_host: (public_ipv4_address + private_ipv4_addresses) | first
+  ansible_user: "'azureuser'"
+  cloud: "'azure'"
+  cloud_region: location
+  # EN: THE CONTRACT: the same five variables as the AWS source. / FR : LE CONTRAT : les mêmes cinq variables que la source AWS.
+  role_tag: tags.Role | default('')
+  env_tag: tags.Environment | default('')
+  os_tag: tags.OS | default('')
+  team_tag: tags.Team | default('')
+  host_tag: tags.Host | default('')
+keyed_groups:
+  - key: location
+    prefix: azure_region
+cache: true
+cache_plugin: ansible.builtin.jsonfile
+cache_connection: ~/.cache/ansible-course/inventory
+cache_timeout: 300

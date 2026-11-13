@@ -1,0 +1,85 @@
+---
+# =============================================================================
+# Lab 3.B — One template, three environments (reference solution).
+#   The SAME playbook and templates; the DIFFERENCE lives in group_vars/{dev,staging,prod}.yml.
+#   cd labs/<cloud>/beginner && ansible-playbook ../../shared/beginner/site.yml [--diff]
+# Lab 3.B — Un modèle, trois environnements (solution de référence).
+#   Le MÊME playbook et les mêmes modèles ; la DIFFÉRENCE vit dans group_vars/{dev,staging,prod}.yml.
+# =============================================================================
+- name: Templated web site for every environment
+  hosts: web
+  become: true
+
+  tasks:
+    - name: Refuse a host that is in no environment group
+      ansible.builtin.assert:
+        that: env_label in ['dev', 'staging', 'prod']
+        fail_msg: "{{ inventory_hostname }} must be in exactly one of dev, staging, prod"
+        quiet: true
+
+    - name: Install nginx
+      ansible.builtin.apt:
+        name: nginx
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Create the site root
+      ansible.builtin.file:
+        path: "{{ site_root }}"
+        state: directory
+        mode: "0755"
+
+    - name: Render the pages
+      ansible.builtin.template:
+        src: "{{ item }}.j2"
+        dest: "{{ site_root }}/{{ item }}"
+        mode: "0644"
+      loop:
+        - index.html
+        - maintenance.html
+
+    - name: Render the nginx site
+      ansible.builtin.template:
+        src: ans-lab.conf.j2
+        dest: /etc/nginx/conf.d/ans-lab.conf
+        mode: "0644"
+      notify: Reload nginx
+
+    - name: Disable the distribution's default site
+      ansible.builtin.file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+      notify: Reload nginx
+
+    - name: Start nginx now and at boot
+      ansible.builtin.service:
+        name: nginx
+        state: started
+        enabled: true
+
+    - name: Apply pending reloads before testing
+      ansible.builtin.meta: flush_handlers
+
+    - name: Each environment answers with its own header
+      ansible.builtin.uri:
+        url: "http://{{ ansible_host }}/healthz"
+        return_content: true
+      register: health
+      delegate_to: localhost
+      become: false
+      failed_when: >-
+        health.content | trim != 'ok ' ~ env_label
+        or health.x_environment | default('') != env_label
+
+  handlers:
+    - name: Validate the nginx configuration
+      ansible.builtin.command: nginx -t
+      changed_when: false
+      listen: Reload nginx
+
+    - name: Reload nginx service
+      ansible.builtin.service:
+        name: nginx
+        state: reloaded
+      listen: Reload nginx

@@ -1,0 +1,42 @@
+---
+# =============================================================================
+# EN: The web role's CONTRACT: types, allowed values, required options. Checked BEFORE any task of the role runs.
+# FR : Le CONTRAT du rôle web : types, valeurs permises, options requises. Vérifié AVANT toute tâche du rôle.
+# =============================================================================
+argument_specs:
+  main:
+    short_description: nginx with atomic releases and a /healthz drain switch
+    description:
+      - Installs nginx on Ubuntu, Amazon Linux 2023 or AlmaLinux, deploys one release under web_root/releases/<version>
+        and switches the "current" symlink to it.
+    options:
+      web_release_version:
+        type: str
+        required: true
+        description: Release to deploy, for example v2. No default on purpose, the caller must say which release.
+      web_root:
+        type: path
+        default: /var/www/ans-lab
+        description: Site root.
+      web_listen_port:
+        type: int
+        default: 80
+        description: Port nginx listens on.
+      web_mark_healthy:
+        type: bool
+        default: true
+        description: Create health/ok so /healthz answers 200 (false while the host is drained).
+      web_log_level:
+        type: str
+        default: warn
+        choices: [debug, info, notice, warn, error, crit]
+        description: nginx error_log level.
+      web_users:
+        type: dict
+        default: {}
+        description: "Users to create: {name: {comment: str, shell: str}}."
+      web_site_extra_directives:
+        type: list
+        elements: str
+        default: []
+        description: Extra lines in the nginx server block.

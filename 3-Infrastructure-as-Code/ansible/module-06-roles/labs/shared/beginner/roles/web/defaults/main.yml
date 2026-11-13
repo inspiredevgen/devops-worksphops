@@ -1,0 +1,12 @@
+---
+# =============================================================================
+# EN: defaults/ = the role's PUBLIC interface: every value a user may override (lowest precedence of all).
+# FR : defaults/ = l'interface PUBLIQUE du rôle : chaque valeur que l'utilisateur peut surcharger (priorité la plus basse).
+# =============================================================================
+web_root: /var/www/ans-lab
+web_release_version: v1
+web_mark_healthy: true
+web_users:
+  deploy: {comment: Deployments, shell: /bin/bash}
+  audit: {comment: Read-only audits, shell: /usr/sbin/nologin}
+web_site_extra_directives: []

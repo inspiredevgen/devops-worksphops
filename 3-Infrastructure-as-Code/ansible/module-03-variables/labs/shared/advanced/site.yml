@@ -1,0 +1,115 @@
+---
+# =============================================================================
+# Lab 3.A — Custom facts + data transformation: configuration built from instance TAGS.
+#   1. Each host reads its own tags from the cloud metadata service and stores them as a CUSTOM FACT.
+#   2. The control node turns the fleet's facts into config: Prometheus targets, a backup plan, /etc/hosts.
+#   cd labs/<cloud>/advanced && ansible-playbook ../../shared/advanced/site.yml
+# Lab 3.A — Faits personnalisés + transformation de données : configuration construite à partir des ÉTIQUETTES.
+# =============================================================================
+
+- name: Tags → custom facts
+  hosts: all
+  become: true
+
+  vars:
+    imds_url: http://169.254.169.254
+    cloud_fact_data:
+      name: "{{ inventory_hostname }}"
+      provider: "{{ cloud }}"
+      private_ip: "{{ ansible_facts['default_ipv4']['address'] | default(ansible_host) }}"
+      tags: "{{ cloud_tags }}"
+
+  tasks:
+    - name: Read this host's tags from the metadata service
+      ansible.builtin.include_tasks: "tasks/tags-{{ cloud }}.yml"
+
+    # EN: Any *.fact file (JSON or INI) in /etc/ansible/facts.d becomes ansible_local.<name> at the next gather.
+    #     No timestamp inside: the file only changes when the tags change (idempotent).
+    # FR : Tout fichier *.fact (JSON ou INI) dans /etc/ansible/facts.d devient ansible_local.<nom> à la prochaine collecte.
+    #     Pas d'horodatage dedans : le fichier ne change que si les étiquettes changent (idempotent).
+    - name: Create the custom facts directory
+      ansible.builtin.file:
+        path: /etc/ansible/facts.d
+        state: directory
+        mode: "0755"
+
+    - name: Store the tags as a custom fact
+      ansible.builtin.copy:
+        dest: /etc/ansible/facts.d/cloud.fact
+        mode: "0644"
+        content: "{{ cloud_fact_data | to_nice_json }}\n"
+      notify: Refresh local facts
+
+    # EN: Re-read ansible_local NOW (the handler), so the next plays see the new fact.
+    # FR : Relire ansible_local MAINTENANT (le handler), pour que les plays suivants voient le nouveau fait.
+    - name: Apply the fact refresh
+      ansible.builtin.meta: flush_handlers
+
+    - name: The custom fact is there
+      ansible.builtin.assert:
+        that:
+          - ansible_local.cloud.tags.Role is defined
+          - ansible_local.cloud.tags.Team is defined
+        fail_msg: "Missing Role/Team tags: check the preset (and instance_metadata_tags on AWS)"
+        quiet: true
+
+  handlers:
+    - name: Refresh local facts
+      ansible.builtin.setup:
+        filter: ansible_local
+
+- name: Fleet facts → configuration (on the control node)
+  hosts: all
+  gather_facts: false
+
+  vars:
+    # EN: One list of dicts, one per host, straight from the custom facts: the input of every transformation.
+    # FR : Une liste de dictionnaires, un par hôte, directement depuis les faits personnalisés.
+    fleet: "{{ ansible_play_hosts_all | map('extract', hostvars, ['ansible_local', 'cloud']) | list }}"
+    build_dir: "{{ inventory_dir }}/build"
+
+  tasks:
+    - name: Create the build directory
+      ansible.builtin.file:
+        path: "{{ build_dir }}/prometheus"
+        state: directory
+        mode: "0755"
+      delegate_to: localhost
+      run_once: true
+
+    - name: Render the configuration files
+      ansible.builtin.template:
+        src: "{{ item.src }}"
+        dest: "{{ build_dir }}/{{ item.dest }}"
+        mode: "0644"
+      loop:
+        - {src: prometheus-targets.json.j2, dest: prometheus/node-targets.json}
+        - {src: backup-plan.yml.j2, dest: backup-plan.yml}
+      delegate_to: localhost
+      run_once: true
+
+    - name: Ownership summary
+      ansible.builtin.debug:
+        msg: "{{ team }} owns {{ team_hosts | map(attribute='name') | sort | join(', ') }}"
+      loop: "{{ fleet | groupby('tags.Team') }}"
+      loop_control:
+        label: "{{ team }}"
+      vars:
+        team: "{{ item[0] }}"
+        team_hosts: "{{ item[1] }}"
+      run_once: true
+
+- name: Fleet facts → every host knows its peers
+  hosts: all
+  become: true
+  gather_facts: false
+
+  vars:
+    fleet: "{{ ansible_play_hosts_all | map('extract', hostvars, ['ansible_local', 'cloud']) | list }}"
+
+  tasks:
+    - name: Add the lab fleet to /etc/hosts
+      ansible.builtin.blockinfile:
+        path: /etc/hosts
+        marker: "# {mark} ANSIBLE LAB FLEET (from tags)"
+        block: "{{ lookup('ansible.builtin.template', 'hosts-block.j2') }}"

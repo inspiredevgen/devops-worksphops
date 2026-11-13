@@ -1,0 +1,29 @@
+---
+# =============================================================================
+# Lab 7.A-AWS — the dynamic inventory, plus the Auto Scaling group: its instances have no Host tag (they come and
+#   go), so they are named by instance ID and grouped by the tag AWS puts on them: aws:autoscaling:groupName.
+# Lab 7.A-AWS — l'inventaire dynamique, plus le groupe Auto Scaling : ses instances n'ont pas d'étiquette Host
+#   (elles vont et viennent) ; nommées par ID d'instance et groupées par l'étiquette d'AWS aws:autoscaling:groupName.
+# =============================================================================
+plugin: amazon.aws.aws_ec2
+regions:
+  - ca-central-1
+filters:
+  tag:Course: ansible-cloud-engineer
+  instance-state-name: running
+hostnames:
+  - tag:Host
+  - instance-id
+compose:
+  ansible_host: public_ip_address | default(private_ip_address, true)
+  ansible_user: "'ec2-user' if ec2_tags.OS | default('') == 'al2023' else 'ubuntu'"
+  cloud: "'aws'"
+keyed_groups:
+  - key: ec2_tags.Role | default('none')
+    prefix: role
+  - key: ec2_tags.OS | default('none')
+    prefix: os
+  - key: ec2_tags['aws:autoscaling:groupName'] | default('none')   # gitleaks:allow (a YAML key named "key")
+    prefix: asg
+use_deprecated_tags: false
+strict: true

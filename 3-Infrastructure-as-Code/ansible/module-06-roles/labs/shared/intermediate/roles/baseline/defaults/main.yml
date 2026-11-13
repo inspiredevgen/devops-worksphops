@@ -1,0 +1,7 @@
+---
+# EN: Public interface of the baseline role (validated by meta/argument_specs.yml).
+# FR : Interface publique du rôle baseline (validée par meta/argument_specs.yml).
+baseline_extra_packages: []
+baseline_admin_users: [ops]
+baseline_motd_message: Authorised use only. Activity may be logged.
+baseline_timezone: UTC

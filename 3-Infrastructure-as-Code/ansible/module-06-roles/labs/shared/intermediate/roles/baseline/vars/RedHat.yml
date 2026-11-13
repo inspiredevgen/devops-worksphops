@@ -1,0 +1,3 @@
+---
+baseline_packages: [jq, tree, dnf-automatic]
+baseline_admin_group: wheel

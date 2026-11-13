@@ -1,0 +1,53 @@
+---
+# =============================================================================
+# EN: Entry point: Ansible runs tasks/main.yml when the role is applied. Keep it a short table of contents.
+# FR : Point d'entrée : Ansible exécute tasks/main.yml quand le rôle est appliqué. Gardez-le court : une table des matières.
+# =============================================================================
+# EN: argument_specs do NOT reject unknown variables: a caller still setting web_root would silently get the
+#     DEFAULT path. Refuse it loudly, with the migration in the message.
+# FR : argument_specs ne rejettent PAS les variables inconnues : un appel qui définit encore web_root obtiendrait
+#     en silence le chemin PAR DÉFAUT. On le refuse clairement, avec la migration dans le message.
+- name: Refuse the removed web_root variable
+  ansible.builtin.assert:
+    that: web_root is not defined
+    fail_msg: >-
+      inspiredevgen.platform.web 2.0.0 removed web_root. Rename it to web_site_root
+      (same meaning), or pin the collection to v1.1.0 until you do.
+    quiet: true
+
+- name: Install and configure nginx for this distribution
+  ansible.builtin.include_tasks: platform.yml
+
+- name: Create the lab users
+  ansible.builtin.user:
+    name: "{{ item.key }}"
+    comment: "{{ item.value.comment }}"
+    shell: "{{ item.value.shell }}"
+  loop: "{{ web_users | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: Deploy the release
+  ansible.builtin.include_tasks: release.yml
+
+- name: Remove old releases
+  ansible.builtin.include_tasks: cleanup.yml
+  when: web_keep_releases | int > 0
+
+- name: Start nginx now and at boot
+  ansible.builtin.service:
+    name: nginx
+    state: started
+    enabled: true
+
+- name: Apply pending reloads
+  ansible.builtin.meta: flush_handlers
+
+- name: Wait until the site is healthy on the host
+  ansible.builtin.uri:
+    url: http://127.0.0.1/healthz
+  register: web_health
+  until: web_health.status == 200
+  retries: 10
+  delay: 2
+  when: web_mark_healthy | bool

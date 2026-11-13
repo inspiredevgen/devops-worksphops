@@ -1,0 +1,9 @@
+---
+# EN: dev: loud banner, debug footer, no caching, every feature switched on.
+# FR : dev : bandeau voyant, pied de page de débogage, pas de cache, toutes les fonctionnalités activées.
+banner_color: "#16a34a"
+show_debug_footer: true
+features:
+  - catalogue
+  - new-checkout
+  - recommendations

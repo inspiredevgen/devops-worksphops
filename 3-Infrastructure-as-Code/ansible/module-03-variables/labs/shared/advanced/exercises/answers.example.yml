@@ -1,0 +1,30 @@
+---
+# =============================================================================
+# EN: Copy to my-answers.yml and write ONE Jinja2 expression per question. Q1 is done for you.
+#     Grade: ansible-playbook check-answers.yml            (single question: -e only=q3)
+# FR : Copiez en my-answers.yml et écrivez UNE expression Jinja2 par question. Q1 est faite pour vous.
+# =============================================================================
+
+# Q1: names of hosts with Monitoring=on, sorted / noms des hôtes avec Monitoring=on, triés
+q1: "{{ fleet | selectattr('tags.Monitoring', 'equalto', 'on') | map(attribute='name') | sort }}"
+
+# Q2: how many hosts are in prod (an integer) / combien d'hôtes en prod (un entier)
+q2: "{{ 'TODO' }}"
+
+# Q3: dict team → number of hosts, e.g. {'payments': 3, …} / dictionnaire équipe → nombre d'hôtes
+q3: "{{ 'TODO' }}"
+
+# Q4: "ip:9100" for every web host, sorted / « ip:9100 » pour chaque hôte web, trié
+q4: "{{ 'TODO' }}"
+
+# Q5: WITH json_query: names of hosts backed up daily OR hourly, sorted / AVEC json_query : sauvegardés daily OU hourly
+q5: "{{ 'TODO' }}"
+
+# Q6: dict name → private_ip / dictionnaire nom → private_ip
+q6: "{{ 'TODO' }}"
+
+# Q7: the distinct teams, sorted / les équipes distinctes, triées
+q7: "{{ 'TODO' }}"
+
+# Q8: the name of the first prod db host (a string) / le nom du premier hôte db en prod (une chaîne)
+q8: "{{ 'TODO' }}"

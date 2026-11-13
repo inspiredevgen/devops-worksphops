@@ -1,0 +1,14 @@
+---
+# EN: Azure: tags come with the compute metadata as a list of {name, value}: items2dict turns it into a dict.
+# FR : Azure : les étiquettes arrivent avec les métadonnées de calcul en liste de {name, value} : items2dict en fait un dictionnaire.
+- name: Read the instance metadata
+  ansible.builtin.uri:
+    url: "{{ imds_url }}/metadata/instance/compute?api-version=2021-02-01"
+    headers:
+      Metadata: "true"
+    return_content: true
+  register: imds_compute
+
+- name: Build the tag dictionary
+  ansible.builtin.set_fact:
+    cloud_tags: "{{ imds_compute.json.tagsList | items2dict(key_name='name', value_name='value') }}"

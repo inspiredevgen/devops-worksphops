@@ -1,0 +1,103 @@
+---
+# =============================================================================
+# Lab 7.A-AZ — Golden image: configure a BUILDER VM, deprovision it, generalize it, capture a managed image.
+#   ansible-playbook ../../shared/advanced/azure/golden-image.yml -e confirm=builder1
+#   ⚠️ One-way trip: a generalized VM can never start again. That is why we use a dedicated builder (role builder),
+#      never a server that serves traffic. Afterwards Terraform rebuilds it: terraform apply -replace=...
+# Lab 7.A-AZ — Image de référence : configurer une VM de CONSTRUCTION, la déprovisionner, la généraliser, la capturer.
+#   ⚠️ Aller simple : une VM généralisée ne redémarre jamais. D'où une VM dédiée (rôle builder), jamais un serveur en service.
+# =============================================================================
+- name: Guard the one-way trip
+  hosts: "{{ image_source | default('builder1') }}"
+  gather_facts: false
+  tasks:
+    - name: Only a builder VM, and only with explicit confirmation
+      ansible.builtin.assert:
+        that:
+          - "'role_builder' in group_names"
+          - confirm | default('') == inventory_hostname
+        fail_msg: >-
+          {{ inventory_hostname }} will be generalized and can NEVER start again. It must be in role_builder,
+          and you must pass -e confirm={{ inventory_hostname }}.
+        quiet: true
+
+- name: Configure the builder exactly like a web server
+  hosts: "{{ image_source | default('builder1') }}"
+  become: true
+  roles:
+    - role: web
+      vars:
+        web_release_version: v1
+
+  post_tasks:
+    # EN: Removes machine-specific data (SSH host keys, DHCP leases, cloud-init state) so every copy is a new machine.
+    #     Without "+user": the azureuser account stays, new VMs still get their own key from Terraform.
+    # FR : Retire les données propres à la machine (clés d'hôte SSH, baux DHCP, état cloud-init) : chaque copie est neuve.
+    - name: Deprovision with the Azure agent
+      ansible.builtin.command: waagent -deprovision -force
+      changed_when: true
+
+- name: Generalize and capture (control node)
+  hosts: "{{ image_source | default('builder1') }}"
+  gather_facts: false
+
+  vars:
+    image_keep: 2
+    image_name: "img-ans-lab-web-{{ now(utc=true).strftime('%Y%m%d-%H%M') }}"
+
+  tasks:
+    - name: Stop and deallocate the builder
+      azure.azcollection.azure_rm_virtualmachine:
+        resource_group: "{{ resource_group }}"
+        name: "{{ name }}"
+        allocated: false
+      delegate_to: localhost
+
+    - name: Mark it generalized (irreversible)
+      azure.azcollection.azure_rm_virtualmachine:
+        resource_group: "{{ resource_group }}"
+        name: "{{ name }}"
+        generalized: true
+      delegate_to: localhost
+
+    - name: Capture the managed image
+      azure.azcollection.azure_rm_image:
+        resource_group: "{{ resource_group }}"
+        name: "{{ image_name }}"
+        location: "{{ location }}"
+        source: "{{ name }}"
+        os_type: Linux
+        # EN: Ubuntu 24.04 "server" is a Gen2 image. / FR : Ubuntu 24.04 « server » est une image Gen2.
+        hyper_v_generation: V2
+        tags:
+          Course: ansible-cloud-engineer
+          Purpose: golden
+          Role: web
+          Source: "{{ inventory_hostname }}"
+      register: golden
+      delegate_to: localhost
+
+    - name: List our golden images
+      azure.azcollection.azure_rm_image_info:
+        resource_group: "{{ resource_group }}"
+        tags:
+          - Purpose:golden
+      register: golden_images
+      delegate_to: localhost
+
+    - name: Prune old images, keep the newest {{ image_keep }}
+      azure.azcollection.azure_rm_image:
+        resource_group: "{{ resource_group }}"
+        name: "{{ item.name }}"
+        state: absent
+      loop: "{{ (golden_images.images | selectattr('name', 'match', 'img-ans-lab-web-') | sort(attribute='name', reverse=true))[image_keep:] }}"
+      loop_control:
+        label: "{{ item.name }}"
+      delegate_to: localhost
+
+    - name: Hand the image back to Terraform
+      ansible.builtin.debug:
+        msg:
+          - "Image {{ image_name }} is ready: {{ golden.id }}"
+          - 'Terraform: source_image_id = "{{ golden.id }}" in a VM or scale set (instead of source_image_reference).'
+          - "The builder is gone for good. Rebuild it: terraform apply -replace='azurerm_linux_virtual_machine.host[\"{{ inventory_hostname }}\"]'"

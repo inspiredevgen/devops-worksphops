@@ -1,0 +1,78 @@
+---
+# =============================================================================
+# Lab 3.I — Per-group configuration + cloud metadata as facts.
+#   Same playbook for AWS and Azure, Ubuntu and RHEL family: the differences live in group_vars.
+#   cd labs/<cloud>/intermediate && ansible-playbook ../../shared/intermediate/site.yml
+# Lab 3.I — Configuration par groupe + métadonnées cloud en faits.
+#   Même playbook pour AWS et Azure, Ubuntu et famille RHEL : les différences vivent dans group_vars.
+# =============================================================================
+
+- name: Classify hosts by what they ARE, not what we called them
+  hosts: all
+  gather_facts: true
+
+  tasks:
+    # EN: group_by creates groups at run time; group_vars/family_<name>.yml is then loaded for them.
+    # FR : group_by crée des groupes à l'exécution ; group_vars/family_<nom>.yml est alors chargé pour eux.
+    - name: Group by OS family
+      ansible.builtin.group_by:
+        key: "family_{{ ansible_facts['os_family'] }}"
+      changed_when: false
+
+- name: Baseline from group variables
+  hosts: all
+  become: true
+
+  tasks:
+    - name: Refresh the apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+      when: "'family_Debian' in group_names"
+
+    - name: Install the baseline packages for this family
+      ansible.builtin.package:
+        name: "{{ baseline_packages }}"
+        state: present
+
+    - name: Start the scheduler for this family
+      ansible.builtin.service:
+        name: "{{ cron_service }}"
+        state: started
+        enabled: true
+
+    - name: Create the operations account in this family's admin group
+      ansible.builtin.user:
+        name: "{{ ops_user }}"
+        groups: "{{ admin_group }}"
+        append: true
+        shell: /bin/bash
+
+- name: Cloud metadata as facts
+  hosts: all
+  become: true
+
+  tasks:
+    # EN: A DYNAMIC include: the file name is only known at run time (the "cloud" inventory variable).
+    # FR : Un include DYNAMIQUE : le nom du fichier n'est connu qu'à l'exécution (variable d'inventaire « cloud »).
+    - name: Read the metadata of this cloud
+      ansible.builtin.include_tasks: "tasks/metadata-{{ cloud }}.yml"
+
+    - name: Show the normalised metadata
+      ansible.builtin.debug:
+        var: instance
+
+    - name: Message of the day from facts and metadata
+      ansible.builtin.template:
+        src: motd.j2
+        dest: /etc/motd
+        mode: "0644"
+
+    - name: Write the fleet report on the control node
+      ansible.builtin.template:
+        src: fleet-report.md.j2
+        dest: "{{ inventory_dir }}/fleet-report.md"
+        mode: "0644"
+      delegate_to: localhost
+      run_once: true
+      become: false

@@ -1,0 +1,37 @@
+---
+# =============================================================================
+# EN: Entry point: Ansible runs tasks/main.yml when the role is applied. Keep it a short table of contents.
+# FR : Point d'entrée : Ansible exécute tasks/main.yml quand le rôle est appliqué. Gardez-le court : une table des matières.
+# =============================================================================
+- name: Install and configure nginx for this distribution
+  ansible.builtin.include_tasks: platform.yml
+
+- name: Create the lab users
+  ansible.builtin.user:
+    name: "{{ item.key }}"
+    comment: "{{ item.value.comment }}"
+    shell: "{{ item.value.shell }}"
+  loop: "{{ web_users | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: Deploy the release
+  ansible.builtin.include_tasks: release.yml
+
+- name: Start nginx now and at boot
+  ansible.builtin.service:
+    name: nginx
+    state: started
+    enabled: true
+
+- name: Apply pending reloads
+  ansible.builtin.meta: flush_handlers
+
+- name: Wait until the site is healthy on the host
+  ansible.builtin.uri:
+    url: http://127.0.0.1/healthz
+  register: web_health
+  until: web_health.status == 200
+  retries: 10
+  delay: 2
+  when: web_mark_healthy | bool

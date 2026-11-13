@@ -1,0 +1,23 @@
+---
+# =============================================================================
+# EN: Print one line per host from FACTS. With fact caching (Lab 1.I) this play does not connect at all:
+#     run it after a gather, then with the hosts stopped.  ansible-playbook ../../shared/facts-table.yml
+# FR : Affiche une ligne par hôte à partir des FAITS. Avec le cache de faits (lab 1.I), ce play ne se
+#     connecte pas du tout : lancez-le après une collecte, puis hôtes arrêtés.
+# =============================================================================
+- name: Fleet table from cached facts
+  hosts: all
+  gather_facts: false
+
+  tasks:
+    - name: Print the table (runs on the control node, reads hostvars)
+      ansible.builtin.debug:
+        msg: |-
+          {% for h in ansible_play_hosts_all | sort %}
+          {% set f = hostvars[h]['ansible_facts'] | default({}) %}
+          {% set os = f['distribution'] | default('?') ~ ' ' ~ f['distribution_version'] | default('?') %}
+          {% set ip = (f['default_ipv4']['address'] | default('no-ipv4')) if f else 'NO FACTS CACHED' %}
+          {{ '%-6s %-14s %-22s %s' | format(h, os, f['system_vendor'] | default('?'), ip) }}
+          {% endfor %}
+      run_once: true
+      delegate_to: localhost

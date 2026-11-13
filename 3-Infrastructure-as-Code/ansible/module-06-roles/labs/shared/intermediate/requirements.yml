@@ -1,0 +1,14 @@
+---
+# =============================================================================
+# EN: What THIS PROJECT needs, pinned EXACTLY: the same versions on every laptop, in CI and in the EE.
+#     Collections you publish use RANGES (>=1.2,<2); projects that deploy pin exact versions and upgrade on purpose.
+#       ansible-galaxy collection install -r requirements.yml -p ./collections     # vendored next to the project
+#       ansible-galaxy collection verify -r requirements.yml -p ./collections      # files unchanged since install?
+# FR : Ce dont CE PROJET a besoin, épinglé EXACTEMENT : les mêmes versions partout (portables, CI, EE).
+#     Les collections publiées utilisent des PLAGES ; les projets qui déploient épinglent et mettent à jour volontairement.
+# =============================================================================
+collections:
+  - name: ansible.posix
+    version: "==2.2.2"          # web role: firewalld
+  - name: community.general
+    version: "==13.5.1"         # baseline role: timezone

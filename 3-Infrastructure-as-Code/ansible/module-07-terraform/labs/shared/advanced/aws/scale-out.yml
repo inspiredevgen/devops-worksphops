@@ -1,0 +1,66 @@
+---
+# =============================================================================
+# Lab 7.A-AWS — Scale the Auto Scaling group, then configure the new instances AUTOMATICALLY.
+#   ansible-playbook ../../shared/advanced/aws/scale-out.yml -e desired=3
+#   Terraform created the group and ignores desired_capacity (lifecycle.ignore_changes): scaling is a day-2 job.
+# Lab 7.A-AWS — Mettre à l'échelle le groupe Auto Scaling, puis configurer AUTOMATIQUEMENT les nouvelles instances.
+# =============================================================================
+- name: Scale the group (control node)
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    aws_region: ca-central-1
+    asg_name: ans-lab-web-asg
+
+  tasks:
+    - name: Read the group
+      amazon.aws.autoscaling_group_info:
+        name: "{{ asg_name }}"
+        region: "{{ aws_region }}"
+      register: asg_info
+
+    - name: The requested size fits the group
+      ansible.builtin.assert:
+        that:
+          - asg_info.results | length == 1
+          - desired | int >= asg_info.results[0].min_size
+          - desired | int <= asg_info.results[0].max_size
+        fail_msg: >-
+          {{ asg_name }}: desired must be between {{ asg_info.results[0].min_size | default('?') }}
+          and {{ asg_info.results[0].max_size | default('?') }} (got {{ desired | default('nothing: pass -e desired=N') }})
+        quiet: true
+
+    - name: Set the desired capacity and wait for the instances
+      amazon.aws.autoscaling_group:
+        name: "{{ asg_name }}"
+        desired_capacity: "{{ desired | int }}"
+        min_size: "{{ asg_info.results[0].min_size }}"
+        max_size: "{{ asg_info.results[0].max_size }}"
+        wait_for_instances: true
+        wait_timeout: 600
+        region: "{{ aws_region }}"
+
+    # EN: New instances exist now: reload the dynamic inventory so the next plays see them.
+    # FR : Les nouvelles instances existent : recharger l'inventaire dynamique pour que les plays suivants les voient.
+    - name: Reload the inventory
+      ansible.builtin.meta: refresh_inventory
+
+# EN: Idempotency means you never track "which ones are new": run the role on the whole group,
+#     existing instances report ok, new ones converge.
+# FR : L'idempotence évite de suivre « lesquelles sont nouvelles » : on applique le rôle à tout le groupe,
+#     les instances existantes répondent ok, les nouvelles convergent.
+- name: Wait until the group's instances are ready
+  hosts: asg_ans_lab_web_asg
+  gather_facts: false
+  tasks:
+    - name: SSH, then cloud-init, then facts
+      ansible.builtin.include_tasks: ../../tasks/wait-ready.yml
+
+- name: Configure every instance of the group
+  hosts: asg_ans_lab_web_asg
+  become: true
+  roles:
+    - role: web
+      vars:
+        web_release_version: v1

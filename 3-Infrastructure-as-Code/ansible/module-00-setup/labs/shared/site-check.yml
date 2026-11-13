@@ -1,0 +1,35 @@
+---
+# =============================================================================
+# EN: Proof that the lab works: connect, gather facts, confirm sudo, print a one-line summary per host.
+# FR : Preuve que le lab fonctionne : connexion, faits, sudo confirmé, résumé d'une ligne par hôte.
+#   ansible-playbook ../../shared/site-check.yml
+# =============================================================================
+- name: Check every lab host
+  hosts: all
+  gather_facts: true
+
+  tasks:
+    - name: Python on the managed node is recent enough
+      ansible.builtin.assert:
+        that: ansible_facts['python']['version']['major'] == 3 and ansible_facts['python']['version']['minor'] >= 9
+        fail_msg: "Python {{ ansible_facts['python_version'] }}: ansible-core 2.21 needs 3.9+ on managed nodes"
+        quiet: true
+
+    - name: Become root works
+      ansible.builtin.command: id -u
+      become: true
+      register: whoami
+      changed_when: false
+
+    - name: Confirm the task ran as root
+      ansible.builtin.assert:
+        that: whoami.stdout == "0"
+        quiet: true
+
+    - name: Print a one-line summary
+      ansible.builtin.debug:
+        msg: >-
+          {{ inventory_hostname }}: {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}
+          · kernel {{ ansible_facts['kernel'] }} · {{ ansible_facts['processor_vcpus'] }} vCPU
+          · {{ ansible_facts['memtotal_mb'] }} MB · {{ ansible_facts['default_ipv4']['address'] | default('n/a') }}
+          · cloud={{ cloud | default('local') }} · groups={{ group_names | join(',') }}

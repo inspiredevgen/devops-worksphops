@@ -1,0 +1,124 @@
+---
+# =============================================================================
+# Lab 7.I — Ansible drives Terraform: plan → review → apply EXACTLY the reviewed plan → read the new state as
+#   inventory → configure. One command, two tools, each doing its own job.
+#   ansible-playbook ../../shared/intermediate/provision.yml \
+#     -e tf_project_dir=$(realpath ../../../../lab-hosts/aws) -e tf_preset=presets/m07-intermediate.tfvars \
+#     -e '{"tf_vars": {"my_ip": "203.0.113.10"}}'
+#   Unattended (CI): add -e approve=true   ·   A plan that destroys/replaces: also -e allow_destroy=true
+# Lab 7.I — Ansible pilote Terraform : plan → revue → appliquer EXACTEMENT le plan revu → lire le nouvel état comme
+#   inventaire → configurer.
+# =============================================================================
+- name: Provision with Terraform (control node)
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    tf_binary: terraform
+    tf_vars: {}
+    tf_plan_file: "{{ tf_project_dir }}/ansible-lab.tfplan"
+    plan_summary: "{{ (plan_json.stdout | from_json).resource_changes | default([]) }}"
+    deletes: "{{ plan_summary | selectattr('change.actions', 'contains', 'delete') | map(attribute='address') | list }}"
+
+  tasks:
+    - name: Inputs are set
+      ansible.builtin.assert:
+        that:
+          - tf_project_dir is defined
+          - tf_preset is defined
+        fail_msg: "Pass -e tf_project_dir=<abs path to lab-hosts/cloud> -e tf_preset=presets/<file>.tfvars"
+        quiet: true
+
+    # EN: state: planned writes a plan FILE and changes nothing (Terraform's own "plan -out").
+    # FR : state: planned écrit un FICHIER de plan et ne change rien (le « plan -out » de Terraform).
+    - name: Plan to a file
+      cloud.terraform.terraform:
+        project_path: "{{ tf_project_dir }}"
+        binary_path: "{{ tf_binary }}"
+        state: planned
+        plan_file: "{{ tf_plan_file }}"
+        force_init: true
+        variables_files:
+          - "{{ tf_project_dir }}/{{ tf_preset }}"
+        variables: "{{ tf_vars }}"
+
+    - name: Read the plan as JSON
+      ansible.builtin.command:
+        argv: ["{{ tf_binary }}", "-chdir={{ tf_project_dir }}", "show", "-json", "{{ tf_plan_file }}"]
+      register: plan_json
+      changed_when: false
+
+    - name: Show what the plan will do
+      ansible.builtin.debug:
+        msg:
+          create: "{{ plan_summary | selectattr('change.actions', 'equalto', ['create']) | map(attribute='address') | list }}"
+          update: "{{ plan_summary | selectattr('change.actions', 'equalto', ['update']) | map(attribute='address') | list }}"
+          delete_or_replace: "{{ deletes }}"
+
+    # EN: A plan that destroys or replaces something needs an explicit second "yes" (allow_destroy).
+    # FR : Un plan qui détruit ou remplace quelque chose exige un second « oui » explicite (allow_destroy).
+    - name: Refuse destructive plans unless explicitly allowed
+      ansible.builtin.assert:
+        that: deletes | length == 0 or (allow_destroy | default(false) | bool)
+        fail_msg: "The plan deletes or replaces {{ deletes | join(', ') }}. Re-run with -e allow_destroy=true if that is intended."
+        quiet: true
+
+    - name: Ask for approval
+      ansible.builtin.pause:
+        prompt: "Apply this plan? Type yes"
+      register: approval
+      when: approve is not defined
+
+    - name: Refuse without approval
+      ansible.builtin.assert:
+        that: (approve | default(false) | bool) or (approval.user_input | default('') | trim == 'yes')
+        fail_msg: Not approved, nothing applied.
+        quiet: true
+
+    # EN: Applying the PLAN FILE applies what was reviewed, even if variables or code changed in between.
+    # FR : Appliquer le FICHIER de plan applique ce qui a été revu, même si variables ou code ont changé entre-temps.
+    - name: Apply exactly the reviewed plan
+      cloud.terraform.terraform:
+        project_path: "{{ tf_project_dir }}"
+        binary_path: "{{ tf_binary }}"
+        state: present
+        plan_file: "{{ tf_plan_file }}"
+
+    - name: Delete the plan file (it can contain sensitive values)
+      ansible.builtin.file:
+        path: "{{ tf_plan_file }}"
+        state: absent
+
+    # EN: The inventory (terraform_state plugin) is re-read from the NEW state: new hosts appear for the next plays.
+    # FR : L'inventaire (plugin terraform_state) est relu depuis le NOUVEL état : les nouveaux hôtes apparaissent.
+    - name: Reload the inventory from the new Terraform state
+      ansible.builtin.meta: refresh_inventory
+
+    - name: The new state produced inventory hosts
+      ansible.builtin.assert:
+        that: groups['all'] | length > 0
+        fail_msg: >-
+          The inventory is still empty after apply: check inventory/lab.terraform_state.yml
+          (state path, binary_path), then run make-state-inventory.sh again.
+        quiet: true
+
+- name: Wait until the hosts are really ready
+  hosts: all:!localhost
+  gather_facts: false
+  tasks:
+    - name: SSH, then cloud-init, then facts
+      ansible.builtin.include_tasks: ../tasks/wait-ready.yml
+
+- name: Configure the web servers
+  hosts: role_web
+  become: true
+  roles:
+    - role: web
+      vars:
+        web_release_version: v1
+
+- name: Configure everything else
+  hosts: all:!role_web:!localhost
+  become: true
+  roles:
+    - role: baseline

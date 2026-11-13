@@ -1,0 +1,8 @@
+---
+# EN: staging: like prod, but visibly not prod. / FR : staging : comme la prod, mais visiblement pas la prod.
+banner_color: "#d97706"
+cache_max_age: 60
+gzip_enabled: true
+features:
+  - catalogue
+  - new-checkout

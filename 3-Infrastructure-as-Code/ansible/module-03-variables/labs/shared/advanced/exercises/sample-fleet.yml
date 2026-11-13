@@ -1,0 +1,12 @@
+---
+# EN: A realistic fleet, shaped exactly like ansible_local.cloud (Lab 3.A). Offline: no cloud needed.
+# FR : Un parc réaliste, de la même forme qu'ansible_local.cloud (lab 3.A). Hors ligne : aucun cloud requis.
+fleet:
+  - {name: web1, provider: aws, private_ip: 10.0.1.11, tags: {Role: web, Environment: prod, Team: storefront, Backup: none, Monitoring: "on"}}
+  - {name: web2, provider: aws, private_ip: 10.0.1.12, tags: {Role: web, Environment: prod, Team: storefront, Backup: none, Monitoring: "on"}}
+  - {name: web3, provider: azure, private_ip: 10.140.1.13, tags: {Role: web, Environment: dev, Team: storefront, Backup: none, Monitoring: "off"}}
+  - {name: app1, provider: aws, private_ip: 10.0.2.21, tags: {Role: app, Environment: prod, Team: payments, Backup: daily, Monitoring: "on"}}
+  - {name: app2, provider: azure, private_ip: 10.140.2.22, tags: {Role: app, Environment: staging, Team: payments, Backup: daily, Monitoring: "on"}}
+  - {name: db1, provider: aws, private_ip: 10.0.3.31, tags: {Role: db, Environment: prod, Team: payments, Backup: hourly, Monitoring: "on"}}
+  - {name: db2, provider: azure, private_ip: 10.140.3.32, tags: {Role: db, Environment: dev, Team: search, Backup: weekly, Monitoring: "off"}}
+  - {name: idx1, provider: azure, private_ip: 10.140.4.41, tags: {Role: search, Environment: prod, Team: search, Backup: daily, Monitoring: "on"}}

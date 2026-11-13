@@ -1,0 +1,62 @@
+---
+# =============================================================================
+# Lab 7.A-AZ — Scale the scale set, then configure the new instances AUTOMATICALLY.
+#   ansible-playbook ../../shared/advanced/azure/scale-out.yml -e desired=3
+#   Terraform created the scale set and ignores its instance count (lifecycle.ignore_changes): scaling is a day-2 job.
+# Lab 7.A-AZ — Mettre à l'échelle le groupe identique, puis configurer AUTOMATIQUEMENT les nouvelles instances.
+# =============================================================================
+- name: Scale the scale set (control node)
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    vmss_resource_group: rg-ans-lab-hosts
+    vmss_name: vmss-ans-lab-web
+    # EN: Azure has no "max size" on a manual scale set: the lab's guard rail (Terraform: scale_set.max).
+    # FR : Azure n'a pas de « taille max » sur un groupe manuel : le garde-fou du lab (Terraform : scale_set.max).
+    vmss_max: 4
+
+  tasks:
+    - name: The requested size is sane
+      ansible.builtin.assert:
+        that:
+          - desired is defined
+          - desired | int >= 0
+          - desired | int <= vmss_max
+        fail_msg: "desired must be between 0 and {{ vmss_max }} (got {{ desired | default('nothing: pass -e desired=N') }})"
+        quiet: true
+
+    # EN: azure_rm_virtualmachinescaleset would need the WHOLE definition (Terraform owns it). A PATCH of one field
+    #     through the Azure REST API changes the capacity and nothing else. Ansible waits for the operation.
+    # FR : azure_rm_virtualmachinescaleset exigerait TOUTE la définition (Terraform en est propriétaire). Un PATCH d'un
+    #     seul champ via l'API REST change la capacité et rien d'autre. Ansible attend la fin de l'opération.
+    - name: Set the capacity
+      azure.azcollection.azure_rm_resource:
+        resource_group: "{{ vmss_resource_group }}"
+        provider: Compute
+        resource_type: virtualMachineScaleSets
+        resource_name: "{{ vmss_name }}"
+        api_version: "2024-07-01"
+        method: PATCH
+        body:
+          sku:
+            capacity: "{{ desired | int }}"
+        polling_timeout: 900
+
+    - name: Reload the inventory
+      ansible.builtin.meta: refresh_inventory
+
+- name: Wait until the scale set's instances are ready
+  hosts: vmss_web
+  gather_facts: false
+  tasks:
+    - name: SSH, then cloud-init, then facts
+      ansible.builtin.include_tasks: ../../tasks/wait-ready.yml
+
+- name: Configure every instance of the scale set
+  hosts: vmss_web
+  become: true
+  roles:
+    - role: web
+      vars:
+        web_release_version: v1

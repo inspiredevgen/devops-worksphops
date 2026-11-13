@@ -1,0 +1,37 @@
+---
+# =============================================================================
+# Lab 4.A — source 3/3: "constructed" runs AFTER the cloud sources (files load in alphabetical order)
+#   and builds the shared groups from the CONTRACT variables only: it does not care which cloud a host is in.
+# Lab 4.A — source 3/3 : « constructed » s'exécute APRÈS les sources cloud (ordre alphabétique des fichiers)
+#   et construit les groupes communs à partir des seules variables du CONTRAT : peu importe le cloud de l'hôte.
+# =============================================================================
+plugin: ansible.builtin.constructed
+strict: true
+
+# EN: strict + an EMPTY tag would reject the WHOLE inventory because of one badly tagged VM.
+#     default_value puts that host in role_missing (env_missing…) instead; strict still catches typos.
+# FR : strict + une étiquette VIDE rejetterait TOUT l'inventaire à cause d'une seule VM mal étiquetée.
+#     default_value place plutôt cet hôte dans role_missing (env_missing…) ; strict détecte toujours les fautes de frappe.
+keyed_groups:
+  - key: role_tag
+    prefix: role             # role_web = web servers on AWS AND Azure
+    default_value: missing
+  - key: env_tag
+    prefix: env
+    default_value: missing
+  - key: team_tag
+    prefix: team
+    default_value: missing
+  - key: cloud
+    prefix: cloud            # cloud_aws, cloud_azure
+  - key: os_tag
+    prefix: os
+    default_value: missing
+
+groups:
+  prod_web: env_tag == 'prod' and role_tag == 'web'
+  rhel_family: os_tag in ['al2023', 'almalinux']
+  # EN: Hosts that break the contract land here: contract-check.yml explains why.
+  # FR : Les hôtes qui ne respectent pas le contrat arrivent ici : contract-check.yml explique pourquoi.
+  contract_violations: >-
+    role_tag == '' or env_tag == '' or os_tag == '' or host_tag == ''

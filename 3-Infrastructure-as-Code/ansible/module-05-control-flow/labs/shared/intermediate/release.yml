@@ -1,0 +1,124 @@
+---
+# =============================================================================
+# Lab 5.I — A release with AUTOMATIC ROLLBACK: block (deploy + verify) / rescue (restore) / always (journal).
+#   ansible-playbook ../../shared/intermediate/release.yml -e release_version=v2
+#   Fault injection (lab only): -e '{"fault": "bad-config", "fault_hosts": ["web2"]}'
+#                               -e '{"fault": "missing-page"}'          (every host)
+# Lab 5.I — Une livraison avec RETOUR ARRIÈRE AUTOMATIQUE : block (déployer + vérifier) / rescue (restaurer) / always (journal).
+# =============================================================================
+- name: Release with automatic rollback
+  hosts: all
+  become: true
+
+  vars:
+    web_root: /var/www/ans-lab
+    web_templates: "{{ playbook_dir }}/../web/templates"
+    release_version: v2
+    # EN: Lab fault injection: which fault, on which hosts (default: all). / FR : Injection de panne du lab : laquelle, sur quels hôtes.
+    fault_hosts: "{{ ansible_play_hosts_all }}"
+    my_fault: "{{ fault | default('none') if inventory_hostname in fault_hosts else 'none' }}"
+
+  tasks:
+    - name: Refuse to run before Lab 5.B (no release on disk yet)
+      ansible.builtin.stat:
+        path: "{{ web_root }}/current"
+      register: current_link
+      failed_when: not current_link.stat.islnk | default(false)
+
+    - name: Remember the release that is live now
+      ansible.builtin.set_fact:
+        previous_release: "{{ current_link.stat.lnk_source | basename }}"
+
+    - name: Deploy and verify, or roll back
+      block:
+        - name: Render the site config for this release
+          ansible.builtin.template:
+            src: "{{ web_templates }}/site.conf.j2"
+            dest: /etc/nginx/conf.d/ans-lab.conf
+            mode: "0644"
+          vars:
+            # EN: "bad-config" injects an invalid directive / FR : « bad-config » injecte une directive invalide
+            site_extra_directives: "{{ ['server_tokens offf;'] if my_fault == 'bad-config' else [] }}"
+          register: site_conf
+
+        # EN: The site file can't be validated alone (it is included by nginx.conf): test the WHOLE config.
+        # FR : Le fichier du site ne peut pas être validé seul (il est inclus par nginx.conf) : on teste TOUTE la config.
+        - name: Test the whole nginx configuration
+          ansible.builtin.command: nginx -t
+          changed_when: false
+
+        - name: Put the new release in place
+          ansible.builtin.include_tasks: "{{ playbook_dir }}/../web/tasks/release.yml"
+          vars:
+            release_fault: "{{ my_fault }}"
+
+        # EN: Reload only if something changed: a re-run of the same release stays changed=0 (except the journal).
+        # FR : Recharger seulement si quelque chose a changé : relancer la même version reste à changed=0 (sauf le journal).
+        - name: Reload nginx with the new config
+          ansible.builtin.service:
+            name: nginx
+            state: reloaded
+          when: site_conf is changed or release_link is changed
+
+        - name: Smoke test the new release on the host
+          ansible.builtin.uri:
+            url: http://127.0.0.1/
+            return_content: true
+          register: smoke
+          until: smoke.status == 200 and release_version in smoke.content
+          retries: 5
+          delay: 2
+
+      rescue:
+        - name: Explain what failed
+          ansible.builtin.debug:
+            msg: >-
+              {{ inventory_hostname }}: "{{ ansible_failed_task.name }}" failed
+              ({{ ansible_failed_result.msg | default(ansible_failed_result.stderr | default('?')) | truncate(160) }}).
+              Rolling back to {{ previous_release }}.
+
+        - name: Restore the known-good site config
+          ansible.builtin.template:
+            src: "{{ web_templates }}/site.conf.j2"
+            dest: /etc/nginx/conf.d/ans-lab.conf
+            mode: "0644"
+          vars:
+            site_extra_directives: []
+
+        - name: Point "current" back to the previous release
+          ansible.builtin.file:
+            src: "{{ web_root }}/releases/{{ previous_release }}"
+            dest: "{{ web_root }}/current"
+            state: link
+            force: true
+
+        - name: Reload nginx with the restored config
+          ansible.builtin.service:
+            name: nginx
+            state: reloaded
+
+        - name: Prove the previous release answers again
+          ansible.builtin.uri:
+            url: http://127.0.0.1/
+            return_content: true
+          register: restored
+          until: restored.status == 200 and previous_release in restored.content
+          retries: 5
+          delay: 2
+
+        # EN: The host is SAFE again, but the release did NOT happen: fail on purpose so CI/humans see red.
+        # FR : L'hôte est de nouveau SAIN, mais la livraison n'a PAS eu lieu : échec voulu pour que la CI le voie.
+        - name: Report the rollback as a failure
+          ansible.builtin.fail:
+            msg: "{{ release_version }} failed on {{ inventory_hostname }}; rolled back to {{ previous_release }}."
+
+      always:
+        - name: Journal the attempt on the host
+          ansible.builtin.lineinfile:
+            path: /var/log/ans-lab/deploys.log
+            line: >-
+              {{ now(utc=true).isoformat(timespec='seconds') }} {{ release_version }}
+              {{ 'ROLLED-BACK to ' ~ previous_release if ansible_failed_task is defined else 'OK' }}
+              (from {{ previous_release }})
+            create: true
+            mode: "0644"

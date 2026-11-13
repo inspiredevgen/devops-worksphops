@@ -1,0 +1,14 @@
+---
+# =============================================================================
+# Lab 6.B — The Module 5 web playbook, refactored into a ROLE. The playbook is now 10 lines.
+#   cd labs/<cloud>/beginner && ansible-playbook ../../shared/beginner/site.yml
+# Lab 6.B — Le playbook web du module 5, transformé en RÔLE. Le playbook tient maintenant en 10 lignes.
+# =============================================================================
+- name: Web servers
+  hosts: role_web
+  become: true
+
+  roles:
+    - role: web
+      vars:
+        web_release_version: v1

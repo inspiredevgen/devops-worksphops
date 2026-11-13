@@ -1,0 +1,7 @@
+---
+# EN: Amazon Linux 2023 and AlmaLinux 9 both report os_family "RedHat".
+# FR : Amazon Linux 2023 et AlmaLinux 9 indiquent tous deux os_family « RedHat ».
+baseline_packages: [cronie, jq, dnf-automatic]
+cron_service: crond
+ssh_service: sshd
+admin_group: wheel

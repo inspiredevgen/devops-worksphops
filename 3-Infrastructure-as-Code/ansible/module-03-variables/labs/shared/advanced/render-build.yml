@@ -1,0 +1,30 @@
+---
+# =============================================================================
+# EN: Render the Lab 3.A build templates against the sample fleet (offline), to study the transformations.
+#       ansible-playbook render-build.yml && cat exercises/build-sample/prometheus/node-targets.json
+# FR : Rend les modèles du lab 3.A avec le parc d'exemple (hors ligne), pour étudier les transformations.
+# =============================================================================
+- name: Render the build templates from sample data
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - exercises/sample-fleet.yml
+
+  tasks:
+    - name: Create the output directory
+      ansible.builtin.file:
+        path: "{{ playbook_dir }}/exercises/build-sample/prometheus"
+        state: directory
+        mode: "0755"
+
+    - name: Render
+      ansible.builtin.template:
+        src: "{{ item.src }}"
+        dest: "{{ playbook_dir }}/exercises/build-sample/{{ item.dest }}"
+        mode: "0644"
+      loop:
+        - {src: prometheus-targets.json.j2, dest: prometheus/node-targets.json}
+        - {src: backup-plan.yml.j2, dest: backup-plan.yml}
+        - {src: hosts-block.j2, dest: hosts-block.txt}

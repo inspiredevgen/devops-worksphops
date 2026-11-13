@@ -1,0 +1,25 @@
+---
+# EN: The dev inventory: ONLY VMs tagged Environment=dev. / FR : L'inventaire dev : SEULEMENT les VM étiquetées Environment=dev.
+plugin: azure.azcollection.azure_rm
+auth_source: cli
+include_vm_resource_groups:
+  - rg-ans-lab-hosts
+exclude_host_filters:
+  - tags.Course | default('') != 'ansible-cloud-engineer'
+  - tags.Environment | default('') != 'dev'
+plain_host_names: true
+hostnames:
+  - tags.Host | default('')
+  - default
+hostvar_expressions:
+  ansible_host: (public_ipv4_address + private_ipv4_addresses) | first
+  ansible_user: "'azureuser'"
+  cloud: "'azure'"
+  # EN: The tag contract, normalised: the same variable names on every cloud. / FR : Le contrat d'étiquettes, normalisé.
+  env_tag: tags.Environment | default('')
+  role_tag: tags.Role | default('')
+keyed_groups:
+  - key: tags.Role | default('none')
+    prefix: role
+  - key: tags.OS | default('none')
+    prefix: os

@@ -1,0 +1,31 @@
+---
+# =============================================================================
+# EN: Put one release on disk and make it "current". Inputs: web_release_version, web_root, web_mark_healthy.
+# FR : Installe une version sur le disque et la rend « current ». Entrées : web_release_version, web_root, web_mark_healthy.
+# =============================================================================
+- name: Create the release directory
+  ansible.builtin.file:
+    path: "{{ web_root }}/releases/{{ web_release_version }}"
+    state: directory
+    mode: "0755"
+
+- name: Publish the release page
+  ansible.builtin.template:
+    src: index.html.j2
+    dest: "{{ web_root }}/releases/{{ web_release_version }}/index.html"
+    mode: "0644"
+
+- name: Switch "current" to this release (atomic symlink swap)
+  ansible.builtin.file:
+    src: "{{ web_root }}/releases/{{ web_release_version }}"
+    dest: "{{ web_root }}/current"
+    state: link
+    force: true
+  register: web_release_link
+
+- name: Mark the host healthy for the load balancer
+  ansible.builtin.copy:
+    dest: "{{ web_root }}/health/ok"
+    content: "ok {{ web_release_version }}\n"
+    mode: "0644"
+  when: web_mark_healthy | bool

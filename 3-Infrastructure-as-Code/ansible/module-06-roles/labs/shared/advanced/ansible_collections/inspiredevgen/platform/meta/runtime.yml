@@ -1,0 +1,4 @@
+---
+# EN: Installing on an older ansible-core is refused with a clear message, instead of failing in strange ways later.
+# FR : L'installation sur un ansible-core plus ancien est refusée clairement, au lieu d'échouer bizarrement plus tard.
+requires_ansible: ">=2.21.0"

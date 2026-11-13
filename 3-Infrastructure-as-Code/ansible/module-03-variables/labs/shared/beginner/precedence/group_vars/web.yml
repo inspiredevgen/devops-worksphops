@@ -1,0 +1,3 @@
+---
+# EN/FR: inventory group_vars/web.yml
+color: from_group_vars_web

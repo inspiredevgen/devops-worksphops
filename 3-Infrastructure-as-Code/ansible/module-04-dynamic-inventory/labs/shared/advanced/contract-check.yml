@@ -1,0 +1,44 @@
+---
+# =============================================================================
+# EN: The tag contract between Terraform (who writes tags) and Ansible (who groups by them), as a test.
+#     Runs on the control node only: no host is contacted. Use it in CI before any deployment.
+#       ansible-playbook ../../shared/advanced/contract-check.yml
+# FR : Le contrat d'étiquettes entre Terraform (qui les écrit) et Ansible (qui groupe avec), sous forme de test.
+#     S'exécute seulement sur le nœud de contrôle : aucun hôte n'est contacté. À lancer en CI avant tout déploiement.
+# =============================================================================
+- name: Check the tag contract of every inventory host
+  hosts: all
+  gather_facts: false
+
+  vars:
+    allowed:
+      role: [web, app, db, search]
+      env: [dev, staging, prod]
+      os: [ubuntu, al2023, almalinux]
+
+  tasks:
+    - name: Tags are present and valid
+      ansible.builtin.assert:
+        that:
+          - role_tag in allowed.role
+          - env_tag in allowed.env
+          - os_tag in allowed.os
+          - host_tag | length > 0
+          - inventory_hostname == host_tag
+        fail_msg: >-
+          {{ cloud | default('?') }}/{{ inventory_hostname }} breaks the contract:
+          Role={{ role_tag | default('') or '<missing>' }} Environment={{ env_tag | default('') or '<missing>' }}
+          OS={{ os_tag | default('') or '<missing>' }} Host={{ host_tag | default('') or '<missing>' }}
+        quiet: true
+
+    # EN: Two clouds with the same Host tag do not give two hosts: Ansible MERGES them into one, and the later
+    #     source's variables win (wrong IP, wrong user). A merged host carries BOTH clouds' IDs: detect that.
+    # FR : Deux clouds avec la même étiquette Host ne donnent pas deux hôtes : Ansible les FUSIONNE en un seul, et
+    #     les variables de la dernière source gagnent (mauvaise IP, mauvais utilisateur). Un hôte fusionné porte les IDs des DEUX clouds.
+    - name: Each host comes from exactly one cloud
+      ansible.builtin.assert:
+        that: not (instance_id is defined and vmid is defined)
+        fail_msg: >-
+          {{ inventory_hostname }} exists in BOTH clouds (EC2 {{ instance_id | default('') }} and Azure VM {{ vmid | default('') }}):
+          give them different Host tags.
+        quiet: true

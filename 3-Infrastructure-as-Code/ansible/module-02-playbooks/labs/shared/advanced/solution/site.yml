@@ -1,0 +1,95 @@
+---
+# =============================================================================
+# Lab 2.A — Reference solution: the same result as bad-site.yml, with modules only.
+#   Second run: changed=0. Check mode after convergence: changed=0. ansible-lint production: clean.
+# Lab 2.A — Solution de référence : le même résultat que bad-site.yml, uniquement avec des modules.
+# =============================================================================
+- name: Application server (declarative)
+  hosts: all
+  become: true
+
+  vars:
+    app_user: appuser
+    app_root: /opt/app
+    # EN: Same goal, different names: Module 3 moves these to group_vars.
+    # FR : Même but, noms différents : le module 3 les déplace dans group_vars.
+    ssh_service: "{{ 'ssh' if ansible_facts['os_family'] == 'Debian' else 'sshd' }}"
+
+  tasks:
+    # B1 + B2 → apt cache with a validity window, then ONE cross-distro package task
+    - name: Refresh the apt cache when older than 1 hour (Debian family)
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+      when: ansible_facts['os_family'] == 'Debian'
+
+    - name: Install nginx and git
+      ansible.builtin.package:
+        name: [nginx, git]
+        state: present
+
+    # B3 → user module
+    - name: Create the application user
+      ansible.builtin.user:
+        name: "{{ app_user }}"
+        system: true
+        create_home: true
+        shell: /bin/bash
+
+    # B4 + B6 → file module (owner and mode in the same declaration)
+    - name: Create the application directory
+      ansible.builtin.file:
+        path: "{{ app_root }}"
+        state: directory
+        owner: "{{ app_user }}"
+        group: "{{ app_user }}"
+        mode: "0750"
+
+    # B5 + B6 → copy with content, owner and mode
+    - name: Write the configuration file
+      ansible.builtin.copy:
+        dest: "{{ app_root }}/app.ini"
+        owner: "{{ app_user }}"
+        group: "{{ app_user }}"
+        mode: "0640"
+        content: |
+          [app]
+          port = 8080
+          log_level = info
+
+    # B7 → git module, as the app user (a root-owned clone in an app directory is a classic mistake)
+    - name: Fetch the application source
+      ansible.builtin.git:
+        repo: https://github.com/octocat/Hello-World.git
+        dest: "{{ app_root }}/src"
+        version: master
+        depth: 1
+      become: true
+      become_user: "{{ app_user }}"
+
+    # B8 → lineinfile + VALIDATION + handler: a typo can no longer lock you out of SSH
+    - name: Allow at most 3 authentication tries
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^#?\s*MaxAuthTries\b'
+        line: MaxAuthTries 3
+        validate: /usr/sbin/sshd -t -f %s
+      notify: Reload sshd
+
+    # B9 → service module
+    - name: Start nginx now and at boot
+      ansible.builtin.service:
+        name: nginx
+        state: started
+        enabled: true
+
+    # B10 + B11 → facts: no command at all
+    - name: Show the OS
+      ansible.builtin.debug:
+        msg: "{{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}"
+
+  handlers:
+    - name: Reload sshd
+      ansible.builtin.service:
+        name: "{{ ssh_service }}"
+        state: reloaded

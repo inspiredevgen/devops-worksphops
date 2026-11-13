@@ -1,0 +1,3 @@
+# EN: Replace each line with your pattern (one per question, in order). Example for Q1:
+# FR : Remplacez chaque ligne par votre motif (un par question, dans l'ordre). Exemple pour Q1 :
+web

@@ -1,0 +1,53 @@
+---
+# =============================================================================
+# EN: How YAML really parses your values (Ansible reads YAML 1.1). Runs on localhost: no cloud, no cost.
+#     ansible-playbook ../../shared/beginner/yaml-pitfalls.yml
+# FR : Comment YAML interprète vraiment vos valeurs (Ansible lit du YAML 1.1). Sur localhost : sans cloud ni coût.
+# =============================================================================
+- name: YAML pitfalls
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    # EN: written as        →  YAML gives you          FR : écrit ainsi → YAML vous donne
+    # EN: ansible-lint flags two of these traps (see the "disable-line" comments): run it on your own code!
+    # FR : ansible-lint repère deux de ces pièges (voir les commentaires « disable-line ») : lancez-le sur votre code !
+    # ↓ → false (boolean!): the "Norway problem"
+    country_unquoted: NO  # yamllint disable-line rule:truthy
+    country_quoted: "NO"          # → "NO"
+    version_unquoted: 1.10        # → 1.1 (a float)
+    version_quoted: "1.10"        # → "1.10"
+    # ↓ → 420 (an octal NUMBER)
+    mode_unquoted: 0644  # yamllint disable-line rule:octal-values
+    mode_quoted: "0644"           # → "0644", what the file module expects
+    time_unquoted: 12:30          # → 750 (base-60 integer in YAML 1.1)
+    time_quoted: "12:30"          # → "12:30"
+    empty_value:                  # → null, not ""
+    message_folded: >-
+      Folded: these lines
+      become one line.
+    message_literal: |
+      Literal: line breaks
+      are kept.
+
+  tasks:
+    - name: Show each value and the TYPE YAML gave it
+      ansible.builtin.debug:
+        msg: "{{ item }} = {{ value | string | replace('\n', '\\n') }}  ({{ value | type_debug }})"
+      vars:
+        value: "{{ lookup('ansible.builtin.vars', item) }}"
+      loop:
+        - country_unquoted
+        - country_quoted
+        - version_unquoted
+        - version_quoted
+        - mode_unquoted
+        - mode_quoted
+        - time_unquoted
+        - time_quoted
+        - empty_value
+        - message_folded
+        - message_literal
+      loop_control:
+        label: "{{ item }}"

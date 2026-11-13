@@ -1,0 +1,3 @@
+---
+# EN/FR: inventory host_vars/web1.yml
+color: from_host_vars_web1

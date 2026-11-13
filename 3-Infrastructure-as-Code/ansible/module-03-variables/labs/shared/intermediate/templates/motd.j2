@@ -1,0 +1,5 @@
+{{ ansible_managed | comment }}
+  {{ inventory_hostname }} · {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }} ({{ ansible_facts['os_family'] }} family)
+  {{ instance.provider | upper }} {{ instance.type }} in {{ instance.region }}/{{ instance.zone }} · {{ instance.private_ip }}
+  Groups: {{ group_names | reject('match', '^(cloud_hosts|ungrouped)$') | join(', ') }}
+  Unauthorised access is prohibited. Activity may be logged.

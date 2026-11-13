@@ -1,0 +1,18 @@
+---
+# EN: Collections used across the course. Install: ansible-galaxy collection install -r requirements.yml
+# FR : Collections utilisées dans le cours. Installation : ansible-galaxy collection install -r requirements.yml
+collections:
+  - name: amazon.aws
+    version: ">=11.5.0,<12.0.0"
+  - name: azure.azcollection
+    version: ">=3.21.0,<4.0.0"
+  - name: community.aws
+    version: ">=11.2.0,<12.0.0"      # EN: elb_target (Module 5 rolling updates) / FR : elb_target (module 5)
+  - name: community.general
+    version: ">=13.5.0,<14.0.0"
+  - name: ansible.posix
+    version: ">=2.2.0,<3.0.0"
+  - name: ansible.windows
+    version: ">=3.9.0,<4.0.0"
+  - name: cloud.terraform
+    version: ">=4.0.0,<5.0.0"        # EN: Module 7 / FR : module 7

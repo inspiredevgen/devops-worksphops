@@ -1,0 +1,25 @@
+DOCUMENTATION:
+  name: release_sort
+  author: DevOps Workshops
+  version_added: 1.0.0
+  short_description: Sort release names naturally (v1.9 before v1.10)
+  description:
+    - Sorts names such as C(v1), C(v1.10), C(2.0.3), C(v2-rc1) from oldest to newest.
+    - A pre-release (C(v2-rc1)) sorts before its final release (C(v2)).
+  options:
+    _input:
+      description: List of release names.
+      type: list
+      elements: str
+      required: true
+    reverse:
+      description: Newest first.
+      type: bool
+      default: false
+EXAMPLES: |
+  latest: "{{ ['v1.9', 'v1.10', 'v1.2'] | inspiredevgen.platform.release_sort | last }}"   # v1.10
+RETURN:
+  _value:
+    description: The sorted list.
+    type: list
+    elements: str

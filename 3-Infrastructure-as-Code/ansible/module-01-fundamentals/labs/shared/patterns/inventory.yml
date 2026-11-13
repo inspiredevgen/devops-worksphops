@@ -1,0 +1,44 @@
+---
+# EN: The YAML twin of inventory.ini. / FR : Le jumeau YAML d'inventory.ini.
+all:
+  children:
+    linux:
+      vars:
+        ansible_connection: local
+      children:
+        web:
+          hosts:
+            web[01:04].ca.example:
+              ansible_user: ubuntu
+        app:
+          hosts:
+            app01.ca.example:
+            app02.ca.example:
+            app01.eu.example:
+        db:
+          hosts:
+            db01.ca.example:
+            db01.eu.example:
+    canada:
+      hosts:
+        web[01:04].ca.example:
+        app01.ca.example:
+        app02.ca.example:
+        db01.ca.example:
+    europe:
+      hosts:
+        app01.eu.example:
+        db01.eu.example:
+    prod:
+      hosts:
+        web01.ca.example:
+        web02.ca.example:
+        app01.ca.example:
+        db01.ca.example:
+        app01.eu.example:
+        db01.eu.example:
+    dev:
+      hosts:
+        web03.ca.example:
+        web04.ca.example:
+        app02.ca.example:

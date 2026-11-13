@@ -1,0 +1,6 @@
+---
+minor_changes:
+  - web - new option ``web_keep_releases`` (default ``3``) removes old releases, sorted with ``inspiredevgen.platform.release_sort``.
+  - web - new option ``web_site_root`` replaces ``web_root`` (same default).
+deprecated_features:
+  - web - ``web_root`` is deprecated; use ``web_site_root``. ``web_root`` will be removed in 2.0.0.

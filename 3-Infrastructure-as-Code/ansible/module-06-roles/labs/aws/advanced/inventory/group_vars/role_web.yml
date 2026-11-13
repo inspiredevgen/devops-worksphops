@@ -1,0 +1,7 @@
+---
+# EN: The CONSUMER project's settings for the web servers. Written for collection 1.0.0, on purpose:
+#     the upgrade exercise (1.1.0 deprecation, 2.0.0 removal) is about exactly this variable.
+# FR : Les réglages du projet CONSOMMATEUR pour les serveurs web. Écrits pour la collection 1.0.0, exprès :
+#     l'exercice de mise à jour (dépréciation en 1.1.0, suppression en 2.0.0) porte sur cette variable.
+web_release_version: v1
+web_root: /var/www/ans-lab

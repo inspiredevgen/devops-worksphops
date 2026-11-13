@@ -1,0 +1,23 @@
+---
+# EN: Azure IMDS: one GET with the "Metadata: true" header (no token), JSON for compute + network.
+# FR : IMDS Azure : un seul GET avec l'en-tête « Metadata: true » (sans jeton), JSON calcul + réseau.
+- name: Read the instance metadata
+  ansible.builtin.uri:
+    url: "{{ imds_url }}/metadata/instance?api-version=2021-02-01"
+    headers:
+      Metadata: "true"
+    return_content: true
+  register: imds_instance
+
+- name: Normalise the Azure metadata
+  ansible.builtin.set_fact:
+    instance:
+      provider: azure
+      id: "{{ imds_instance.json.compute.vmId }}"
+      type: "{{ imds_instance.json.compute.vmSize }}"
+      region: "{{ imds_instance.json.compute.location }}"
+      zone: "{{ imds_instance.json.compute.zone | default('', true) or 'none' }}"
+      private_ip: "{{ imds_instance.json.network.interface[0].ipv4.ipAddress[0].privateIpAddress }}"
+      image: >-
+        {{ imds_instance.json.compute.storageProfile.imageReference.offer
+           | default(imds_instance.json.compute.storageProfile.imageReference.id, true) }}

@@ -1,0 +1,24 @@
+{{ ansible_managed | comment }}
+# One nginx.conf for every distribution: the differences come from vars/<family>.yml.
+user {{ nginx_user }};
+worker_processes auto;
+pid /run/nginx.pid;
+{% for inc in nginx_module_includes %}
+include {{ inc }};
+{% endfor %}
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+    sendfile on;
+    keepalive_timeout 65;
+    server_tokens off;
+    access_log /var/log/nginx/access.log;
+    error_log /var/log/nginx/error.log warn;
+
+    include /etc/nginx/conf.d/*.conf;
+}

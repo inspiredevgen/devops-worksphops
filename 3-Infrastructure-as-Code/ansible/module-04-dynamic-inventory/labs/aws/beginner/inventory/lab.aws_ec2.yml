@@ -1,0 +1,55 @@
+---
+# =============================================================================
+# Lab 4.B-AWS — The EC2 API is the inventory. The file name MUST end in aws_ec2.yml (or .yaml).
+#   ansible-inventory --graph        ansible-inventory --host web1
+# Lab 4.B-AWS — L'API EC2 est l'inventaire. Le nom du fichier DOIT finir par aws_ec2.yml (ou .yaml).
+# =============================================================================
+plugin: amazon.aws.aws_ec2
+regions:
+  - ca-central-1
+
+# EN: Only OUR running instances: the tags are the contract between Terraform and Ansible.
+# FR : Seulement NOS instances en marche : les étiquettes sont le contrat entre Terraform et Ansible.
+filters:
+  tag:Course: ansible-cloud-engineer
+  instance-state-name: running
+
+# EN: inventory_hostname = the Host tag (web1), else the instance ID. Never the volatile public DNS name.
+# FR : inventory_hostname = l'étiquette Host (web1), sinon l'ID d'instance. Jamais le nom DNS public, volatil.
+hostnames:
+  - tag:Host
+  - instance-id
+
+# EN: Host variables computed from what the API returns (Jinja2, evaluated per host).
+#     Tags are in "ec2_tags" (amazon.aws 11 deprecates the old "tags" variable: also a reserved name in Ansible).
+# FR : Variables d'hôte calculées à partir de ce que renvoie l'API (Jinja2, évalué par hôte).
+#     Les étiquettes sont dans « ec2_tags » (amazon.aws 11 rend obsolète l'ancienne variable « tags », nom réservé).
+compose:
+  ansible_host: public_ip_address | default(private_ip_address, true)
+  ansible_user: "'ec2-user' if ec2_tags.OS == 'al2023' else 'ubuntu'"
+  cloud: "'aws'"
+  cloud_instance_id: instance_id
+
+# EN: One group per tag value: role_web, env_dev, os_ubuntu… plus the AZ and the instance type.
+# FR : Un groupe par valeur d'étiquette : role_web, env_dev, os_ubuntu… plus la zone et le type d'instance.
+keyed_groups:
+  - key: ec2_tags.Role
+    prefix: role
+  - key: ec2_tags.Environment  # gitleaks:allow (not a secret: a YAML key named "key")
+    prefix: env
+  - key: ec2_tags.OS
+    prefix: os
+  - key: placement.availability_zone
+    prefix: az
+  - key: instance_type
+    prefix: type
+
+# EN: Stop the plugin from also emitting the deprecated "tags" variable (and its warnings). Transitional:
+#     delete this line when you move to amazon.aws 12, where "tags" is gone (requirements.yml pins < 12).
+# FR : Empêche le plugin d'émettre aussi la variable obsolète « tags » (et ses avertissements). Transitoire :
+#     supprimez cette ligne en passant à amazon.aws 12, où « tags » disparaît (requirements.yml épingle < 12).
+use_deprecated_tags: false
+
+# EN: Fail loudly if an expression above is wrong, instead of silently skipping it.
+# FR : Échouer clairement si une expression ci-dessus est fausse, au lieu de l'ignorer.
+strict: true

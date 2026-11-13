@@ -1,0 +1,34 @@
+---
+# =============================================================================
+# Lab 7.I — Tear down with Terraform, from Ansible, after a typed confirmation (or -e approve=true).
+# Lab 7.I — Tout détruire avec Terraform, depuis Ansible, après une confirmation tapée (ou -e approve=true).
+# =============================================================================
+- name: Destroy the lab hosts
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    tf_binary: terraform
+    tf_vars: {}
+
+  tasks:
+    - name: Ask for confirmation
+      ansible.builtin.pause:
+        prompt: "DESTROY everything in {{ tf_project_dir }}? Type the folder name ({{ tf_project_dir | basename }})"
+      register: confirm
+      when: approve is not defined
+
+    - name: Refuse without confirmation
+      ansible.builtin.assert:
+        that: (approve | default(false) | bool) or (confirm.user_input | default('') | trim == tf_project_dir | basename)
+        fail_msg: Not confirmed, nothing destroyed.
+        quiet: true
+
+    - name: Terraform destroy
+      cloud.terraform.terraform:
+        project_path: "{{ tf_project_dir }}"
+        binary_path: "{{ tf_binary }}"
+        state: absent
+        variables_files:
+          - "{{ tf_project_dir }}/{{ tf_preset }}"
+        variables: "{{ tf_vars }}"

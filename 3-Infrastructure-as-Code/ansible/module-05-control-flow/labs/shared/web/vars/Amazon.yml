@@ -1,0 +1,9 @@
+---
+# EN: Amazon Linux 2023 reports distribution "Amazon": same as RedHat, but its minimal image ships
+#     curl-minimal, which CONFLICTS with the curl package. Keep what's there.
+# FR : Amazon Linux 2023 indique la distribution « Amazon » : comme RedHat, mais son image minimale fournit
+#     curl-minimal, qui est en CONFLIT avec le paquet curl. On garde l'existant.
+web_packages: [nginx]
+nginx_user: nginx
+nginx_module_includes: [/usr/share/nginx/modules/*.conf]
+nginx_remove: []

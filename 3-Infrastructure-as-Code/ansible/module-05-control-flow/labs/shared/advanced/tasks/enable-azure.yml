@@ -1,0 +1,7 @@
+---
+# EN: Azure: nothing to call: the health file is back (previous task), the probe puts the VM back in rotation.
+#     The shared "served through the load balancer" check that follows proves it.
+# FR : Azure : rien à appeler : le fichier de santé est revenu (tâche précédente), la sonde remet la VM en rotation.
+- name: Explain the Azure re-enable
+  ansible.builtin.debug:
+    msg: "{{ inventory_hostname }}: /healthz is 200 again; waiting for the probe to send traffic back."

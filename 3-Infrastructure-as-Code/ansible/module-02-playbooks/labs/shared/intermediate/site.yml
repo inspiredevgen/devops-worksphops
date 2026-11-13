@@ -1,0 +1,256 @@
+---
+# =============================================================================
+# Lab 2.I — A multi-play playbook: baseline (all) → web tier (web) → monitoring agent (all) → verify.
+# Lab 2.I — Un playbook multi-plays : socle (all) → tier web (web) → agent de supervision (all) → vérification.
+#
+#   ansible-playbook ../../shared/intermediate/site.yml                       # everything / tout
+#   ansible-playbook ../../shared/intermediate/site.yml --tags web            # one tier / un tier
+#   ansible-playbook ../../shared/intermediate/site.yml --check --diff        # preview / prévisualiser
+#   ansible-playbook ../../shared/intermediate/site.yml --tags debug          # the "never" task / la tâche « never »
+#   ansible-playbook ../../shared/intermediate/site.yml --skip-tags service   # image build: no service starts / sans démarrage
+# =============================================================================
+
+# ---------------------------------------------------------------------------- 1
+- name: Baseline for every host
+  hosts: all
+  become: true
+  tags: [baseline]
+  # EN: The implicit "Gathering Facts" task inherits the PLAY's tags: with --tags web it would be skipped
+  #     and every fact-based task would fail. Gather explicitly, tagged "always" (facts stay in memory for later plays).
+  # FR : La tâche implicite « Gathering Facts » hérite des étiquettes du PLAY : avec --tags web, elle serait sautée
+  #     et chaque tâche basée sur les faits échouerait. On collecte explicitement, étiquetée « always ».
+  gather_facts: false
+
+  tasks:
+    - name: Gather facts, whatever tags are selected
+      ansible.builtin.setup:
+      tags: [always]
+
+    # EN: "always" runs even with --tags web: never skip the safety check.
+    # FR : « always » s'exécute même avec --tags web : on ne saute jamais la vérification de sécurité.
+    - name: Refuse unsupported operating systems
+      ansible.builtin.assert:
+        that: ansible_facts['os_family'] in ['Debian', 'RedHat']
+        fail_msg: "{{ ansible_facts['distribution'] }} is not supported by this playbook"
+        quiet: true
+      tags: [always]
+
+    - name: Refresh the apt cache (Debian family)
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+      when: ansible_facts['os_family'] == 'Debian'
+
+    - name: Install baseline tools
+      ansible.builtin.package:
+        name: [curl, tar, jq]
+        state: present
+
+    - name: Show the variables Ansible sees (only with --tags debug)
+      ansible.builtin.debug:
+        var: group_names
+      tags: [never, debug]
+
+# ---------------------------------------------------------------------------- 2
+- name: Web tier
+  hosts: web
+  become: true
+  tags: [web]
+
+  vars:
+    site_root: /var/www/ans-lab
+
+  tasks:
+    - name: Install nginx
+      ansible.builtin.apt:
+        name: nginx
+        state: present
+
+    - name: Create the site root
+      ansible.builtin.file:
+        path: "{{ site_root }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Publish the home page
+      ansible.builtin.copy:
+        dest: "{{ site_root }}/index.html"
+        mode: "0644"
+        content: |
+          <!doctype html>
+          <html lang="en"><head><meta charset="utf-8"><title>{{ inventory_hostname }}</title></head>
+          <body><h1>{{ inventory_hostname }}</h1><p>Web tier · managed by Ansible</p></body></html>
+
+    - name: Configure the site (default server + health check)
+      ansible.builtin.copy:
+        dest: /etc/nginx/conf.d/ans-lab.conf
+        mode: "0644"
+        content: |
+          # Managed by Ansible: local changes will be overwritten.
+          server {
+              listen 80 default_server;   # add "listen [::]:80 default_server;" for IPv6 clients
+              server_name _;
+              root {{ site_root }};
+              index index.html;
+              server_tokens off;
+
+              location = /healthz {
+                  access_log off;
+                  default_type text/plain;
+                  return 200 "ok\n";
+              }
+          }
+      notify: Reload nginx
+      tags: [config]
+
+    # EN: Ubuntu's default site also claims "default_server" on port 80: remove it, or nginx refuses to start.
+    # FR : Le site par défaut d'Ubuntu revendique aussi « default_server » sur le port 80 : on le retire.
+    - name: Disable the distribution's default site
+      ansible.builtin.file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+      notify: Reload nginx
+      tags: [config]
+
+    - name: Start nginx now and at boot
+      ansible.builtin.service:
+        name: nginx
+        state: started
+        enabled: true
+      tags: [service]
+
+  handlers:
+    # EN: Handlers run ONCE, at the end of the play, only if notified. Both listen to the same topic:
+    #     the config is validated first, and a broken config FAILS here instead of taking nginx down.
+    # FR : Les handlers s'exécutent UNE fois, en fin de play, seulement s'ils sont notifiés. Les deux écoutent
+    #     le même sujet : la config est d'abord validée, et une config cassée ÉCHOUE ici au lieu d'arrêter nginx.
+    - name: Validate the nginx configuration
+      ansible.builtin.command: nginx -t
+      changed_when: false
+      listen: Reload nginx
+
+    - name: Reload nginx service
+      ansible.builtin.service:
+        name: nginx
+        state: reloaded
+      listen: Reload nginx
+
+# ---------------------------------------------------------------------------- 3
+- name: Monitoring agent (Prometheus node_exporter)
+  hosts: all
+  become: true
+  tags: [monitoring]
+
+  vars:
+    node_exporter_version: "1.12.1"
+    node_exporter_base: "https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}"
+    node_exporter_archive: "node_exporter-{{ node_exporter_version }}.linux-amd64"
+
+  tasks:
+    - name: Create the service account (no shell, no home)
+      ansible.builtin.user:
+        name: node_exporter
+        system: true
+        shell: /usr/sbin/nologin
+        create_home: false
+
+    - name: Create the install directory
+      ansible.builtin.file:
+        path: /opt/node_exporter
+        state: directory
+        mode: "0755"
+
+    # EN: The checksum is read from the release's sha256sums.txt: a tampered or truncated download FAILS.
+    # FR : La somme de contrôle vient du sha256sums.txt de la version : un fichier altéré ou tronqué ÉCHOUE.
+    - name: Download the release archive (verified)
+      ansible.builtin.get_url:
+        url: "{{ node_exporter_base }}/{{ node_exporter_archive }}.tar.gz"
+        dest: "/opt/node_exporter/{{ node_exporter_archive }}.tar.gz"
+        checksum: "sha256:{{ node_exporter_base }}/sha256sums.txt"
+        mode: "0644"
+
+    - name: Unpack the archive
+      ansible.builtin.unarchive:
+        src: "/opt/node_exporter/{{ node_exporter_archive }}.tar.gz"
+        dest: /opt/node_exporter
+        remote_src: true
+        creates: "/opt/node_exporter/{{ node_exporter_archive }}/node_exporter"
+
+    # EN: Upgrading = change node_exporter_version: the link moves and the handler restarts the service.
+    # FR : Mettre à jour = changer node_exporter_version : le lien bouge et le handler redémarre le service.
+    - name: Point /usr/local/bin/node_exporter at this version
+      ansible.builtin.file:
+        src: "/opt/node_exporter/{{ node_exporter_archive }}/node_exporter"
+        dest: /usr/local/bin/node_exporter
+        state: link
+      notify: Restart node_exporter
+
+    - name: Install the systemd unit
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/node_exporter.service
+        mode: "0644"
+        content: |
+          # Managed by Ansible
+          [Unit]
+          Description=Prometheus node_exporter
+          After=network-online.target
+          Wants=network-online.target
+
+          [Service]
+          User=node_exporter
+          Group=node_exporter
+          ExecStart=/usr/local/bin/node_exporter --web.listen-address=:9100
+          Restart=on-failure
+          NoNewPrivileges=true
+          ProtectSystem=strict
+          ProtectHome=true
+
+          [Install]
+          WantedBy=multi-user.target
+      notify: Restart node_exporter
+
+    - name: Start node_exporter now and at boot
+      ansible.builtin.systemd_service:
+        name: node_exporter
+        state: started
+        enabled: true
+        daemon_reload: true
+      tags: [service]
+
+    # EN: Run notified handlers NOW, so the check below tests the new version, not the old one.
+    # FR : Exécuter les handlers notifiés MAINTENANT, pour que la vérification teste la nouvelle version.
+    - name: Apply pending restarts before verifying
+      ansible.builtin.meta: flush_handlers
+
+    - name: The agent serves metrics
+      ansible.builtin.uri:
+        url: http://127.0.0.1:9100/metrics
+        return_content: true
+      register: metrics
+      failed_when: "('node_exporter_build_info' not in metrics.content) or (node_exporter_version not in metrics.content)"
+      tags: [service]
+
+  handlers:
+    - name: Restart node_exporter
+      ansible.builtin.systemd_service:
+        name: node_exporter
+        state: restarted
+        daemon_reload: true
+
+# ---------------------------------------------------------------------------- 4
+- name: Verify the web tier from the control node
+  hosts: web
+  gather_facts: false
+  tags: [web, verify]
+
+  tasks:
+    - name: Each web server answers its health check
+      ansible.builtin.uri:
+        url: "http://{{ ansible_host }}/healthz"
+        return_content: true
+      register: health
+      delegate_to: localhost
+      failed_when: health.content | trim != 'ok'
+      tags: [service]
