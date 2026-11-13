@@ -1,0 +1,15 @@
+---
+# EN: Defaults for optional options. web_release_version has NO default: argument_specs makes it required.
+# FR : Valeurs par défaut des options facultatives. web_release_version n'en a PAS : argument_specs la rend obligatoire.
+
+# EN: 2.0.0: web_root is gone (see CHANGELOG.md, Breaking Changes).
+# FR : 2.0.0 : web_root a disparu (voir CHANGELOG.md, Breaking Changes).
+web_site_root: /var/www/ans-lab
+web_keep_releases: 3
+web_listen_port: 80
+web_mark_healthy: true
+web_log_level: warn
+web_users:
+  deploy: {comment: Deployments, shell: /bin/bash}
+  audit: {comment: Read-only audits, shell: /usr/sbin/nologin}
+web_site_extra_directives: []

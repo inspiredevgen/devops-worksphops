@@ -1,0 +1,19 @@
+{{ ansible_managed | comment }}
+server {
+    listen 80 default_server;
+    server_name _;
+    root {{ web_root }}/current;
+    index index.html;
+    add_header X-Served-By "{{ inventory_hostname }}" always;
+{% for line in web_site_extra_directives %}
+    {{ line }}
+{% endfor %}
+
+    # 200 while {{ web_root }}/health/ok exists, 503 otherwise: removing the file DRAINS this host
+    # from a load balancer (its health check fails) without touching the load balancer itself.
+    location = /healthz {
+        root {{ web_root }}/health;
+        default_type text/plain;
+        try_files /ok =503;
+    }
+}

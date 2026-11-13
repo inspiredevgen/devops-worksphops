@@ -1,0 +1,7 @@
+# EN: Python packages for the control node (installed into ~/.venvs/ansible-course by setup-control-node.sh)
+# FR : Paquets Python du nœud de contrôle (installés dans ~/.venvs/ansible-course par setup-control-node.sh)
+ansible-core>=2.21,<2.22
+ansible-lint>=26.0
+boto3>=1.35
+botocore>=1.35
+jmespath>=1.0

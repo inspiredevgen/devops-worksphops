@@ -1,0 +1,56 @@
+---
+# =============================================================================
+# Lab 7.A-AZ — the dynamic inventory, plus the scale set: its instances have no Host tag (they come and go), so they keep
+#   the plugin's default name, and the "vmss" host variable puts them in the vmss_web group.
+# Lab 7.A-AZ — l'inventaire dynamique, plus le groupe identique : ses instances n'ont pas d'étiquette Host (elles vont et
+#   viennent), elles gardent le nom par défaut du plugin ; la variable d'hôte « vmss » les place dans le groupe vmss_web.
+# =============================================================================
+plugin: azure.azcollection.azure_rm
+
+# EN: Use your "az login" session (no secrets in files). In CI: a service principal or OIDC (Module 10).
+# FR : Utilise votre session « az login » (aucun secret dans les fichiers). En CI : principal de service ou OIDC.
+auth_source: cli
+
+# EN: Only the lab resource group, and only OUR VMs (the default filters already drop stopped VMs).
+# FR : Seulement le groupe de ressources du lab, et seulement NOS VM (les filtres par défaut écartent déjà les VM arrêtées).
+include_vm_resource_groups:
+  - rg-ans-lab-hosts
+# EN: Scale set instances are NOT listed unless you ask. / FR : Les instances de groupe identique ne sont PAS listées sans demande.
+include_vmss_resource_groups:
+  - rg-ans-lab-hosts
+# EN: Scale set instances may not carry the scale set's tags: keep them by their scale set name instead.
+# FR : Les instances d'un groupe identique peuvent ne pas porter ses étiquettes : on les garde par le nom du groupe.
+exclude_host_filters:
+  - tags.Course | default('') != 'ansible-cloud-engineer' and vmss.name | default('') != 'vmss-ans-lab-web'
+
+# EN: inventory_hostname = the Host tag (web1), else the plugin's default name.
+# FR : inventory_hostname = l'étiquette Host (web1), sinon le nom par défaut du plugin.
+plain_host_names: true
+hostnames:
+  - tags.Host | default('')
+  - default
+
+# EN: Host variables from what the API returns. Static strings need BOTH quote levels: "'azure'".
+# FR : Variables d'hôte à partir de ce que renvoie l'API. Les chaînes fixes exigent DEUX niveaux de guillemets : "'azure'".
+hostvar_expressions:
+  ansible_host: (public_ipv4_address + private_ipv4_addresses) | first
+  ansible_user: "'azureuser'"
+  cloud: "'azure'"
+  cloud_vm_name: name
+
+# EN: One group per tag value: role_web, env_dev, os_ubuntu… plus the region.
+# FR : Un groupe par valeur d'étiquette : role_web, env_dev, os_ubuntu… plus la région.
+keyed_groups:
+  - key: tags.Role | default('none')
+    prefix: role
+  - key: tags.Environment | default('none')
+    prefix: env
+  - key: tags.OS | default('none')
+    prefix: os
+  - key: location
+    prefix: region
+
+# EN: Groups from conditions. / FR : Groupes à partir de conditions.
+conditional_groups:
+  linux: os_profile.system == 'linux'
+  vmss_web: vmss.name | default('') == 'vmss-ans-lab-web'

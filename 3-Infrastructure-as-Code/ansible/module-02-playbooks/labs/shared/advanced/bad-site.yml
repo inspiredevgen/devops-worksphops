@@ -1,0 +1,53 @@
+---
+# =============================================================================
+# Lab 2.A — THE PLAYBOOK TO AUDIT. It "works" the first time... and that's the problem.
+#   Every task here uses shell/command where a module exists. Your job: rewrite it as site.yml in your
+#   lab folder, task by task, until prove-idempotent.sh passes. Do NOT copy this style anywhere.
+# Lab 2.A — LE PLAYBOOK À AUDITER. Il « fonctionne » la première fois... et c'est bien le problème.
+#   Chaque tâche utilise shell/command alors qu'un module existe. Votre travail : le réécrire en site.yml
+#   dans votre dossier de lab, tâche par tâche, jusqu'à ce que prove-idempotent.sh réussisse.
+# =============================================================================
+- name: Application server (written the "bash script" way)
+  hosts: all
+  become: true
+
+  tasks:
+    - name: B1 Install packages (Debian)
+      ansible.builtin.shell: apt-get update && apt-get install -y nginx git
+      when: ansible_facts['os_family'] == 'Debian'
+
+    - name: B2 Install packages (RedHat)
+      ansible.builtin.shell: dnf install -y nginx git
+      when: ansible_facts['os_family'] == 'RedHat'
+
+    - name: B3 Create the application user
+      ansible.builtin.shell: id appuser || useradd --system --create-home --shell /bin/bash appuser
+
+    - name: B4 Create the application directory
+      ansible.builtin.command: mkdir -p /opt/app
+
+    - name: B5 Write the configuration file
+      ansible.builtin.shell: printf '[app]\nport = 8080\nlog_level = info\n' > /opt/app/app.ini
+
+    - name: B6 Fix ownership
+      ansible.builtin.shell: chown -R appuser:appuser /opt/app && chmod 0750 /opt/app
+
+    - name: B7 Fetch the application source
+      ansible.builtin.shell: rm -rf /opt/app/src && git clone --depth 1 https://github.com/octocat/Hello-World.git /opt/app/src
+
+    - name: B8 Harden SSH (max 3 authentication tries)
+      ansible.builtin.shell: >
+        grep -q '^MaxAuthTries 3' /etc/ssh/sshd_config ||
+        echo 'MaxAuthTries 3' >> /etc/ssh/sshd_config;
+        systemctl reload ssh 2>/dev/null || systemctl reload sshd
+
+    - name: B9 Start the web server
+      ansible.builtin.shell: systemctl enable nginx && systemctl start nginx
+
+    - name: B10 Report the OS
+      ansible.builtin.shell: grep PRETTY_NAME /etc/os-release
+      register: os_line
+
+    - name: B11 Show the OS
+      ansible.builtin.debug:
+        msg: "{{ os_line.stdout }}"

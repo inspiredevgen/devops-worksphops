@@ -1,0 +1,6 @@
+---
+# EN: Everything that is true for the WHOLE prod environment. / FR : Tout ce qui est vrai pour TOUT l'environnement prod.
+deploy_env: prod
+confirm_required: true      # EN: deploy.yml asks a human (or -e confirm=prod in CI) / FR : deploy.yml demande à un humain
+release_channel: stable
+motd_warning: "PRODUCTION. Changes go through the pipeline and a change ticket."

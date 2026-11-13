@@ -1,0 +1,56 @@
+---
+# =============================================================================
+# EN: Patch one host and reboot ONLY if the OS says it's needed. Debian family: all safe upgrades.
+#     RHEL family: security updates. Then prove the host is healthy again.
+# FR : Corriger un hôte et redémarrer SEULEMENT si l'OS l'exige. Famille Debian : mises à jour sûres.
+#     Famille RHEL : mises à jour de sécurité. Puis prouver que l'hôte est de nouveau sain.
+# =============================================================================
+- name: Upgrade packages (Debian family)
+  ansible.builtin.apt:
+    update_cache: true
+    upgrade: safe
+  when: ansible_facts['os_family'] == 'Debian'
+
+- name: Does Ubuntu ask for a reboot?
+  ansible.builtin.stat:
+    path: /var/run/reboot-required
+  register: patch_reboot_flag
+  when: ansible_facts['os_family'] == 'Debian'
+
+- name: Install needs-restarting (RHEL family)
+  ansible.builtin.package:
+    name: dnf-plugins-core
+    state: present
+  when: ansible_facts['os_family'] == 'RedHat'
+
+- name: Apply security updates (RHEL family)  # noqa: package-latest (patching IS upgrade-to-latest, on purpose)
+  ansible.builtin.dnf:
+    name: "*"
+    state: latest
+    security: true
+    update_only: true
+  when: ansible_facts['os_family'] == 'RedHat'
+
+- name: Does RHEL ask for a reboot? (rc 1 = yes)
+  ansible.builtin.command: dnf needs-restarting -r
+  register: patch_needs_restarting
+  changed_when: false
+  failed_when: patch_needs_restarting.rc not in [0, 1]
+  when: ansible_facts['os_family'] == 'RedHat'
+
+- name: Reboot when the OS requires it
+  ansible.builtin.reboot:
+    reboot_timeout: 900
+    msg: Rebooting after patches (Ansible)
+  when: >-
+    (patch_reboot_flag.stat.exists | default(false))
+    or (patch_needs_restarting.rc | default(0) == 1)
+
+- name: The web site is healthy again
+  ansible.builtin.uri:
+    url: http://127.0.0.1/healthz
+  register: patch_health
+  until: patch_health.status == 200
+  retries: 15
+  delay: 4
+  when: "'role_web' in group_names"

@@ -1,0 +1,14 @@
+# Fleet report
+
+{{ ansible_managed }}. Built from `hostvars` on the control node: no host was contacted to write it.
+
+| Host | OS | Family | Cloud | Type | Region / zone | Private IP | Groups |
+|---|---|---|---|---|---|---|---|
+{% for h in ansible_play_hosts_all | sort %}
+{%   set hv = hostvars[h] %}
+| {{ h }} | {{ hv.ansible_facts.distribution }} {{ hv.ansible_facts.distribution_version }} | {{ hv.ansible_facts.os_family }} | {{ hv.instance.provider }} | {{ hv.instance.type }} | {{ hv.instance.region }} / {{ hv.instance.zone }} | {{ hv.instance.private_ip }} | {{ hv.group_names | reject('match', '^(cloud_hosts|ungrouped)$') | join(', ') }} |
+{% endfor %}
+
+**Totals:** {{ ansible_play_hosts_all | length }} hosts
+{%- for family, members in ansible_play_hosts_all | map('extract', hostvars) | groupby('ansible_facts.os_family') %} · {{ family }}: {{ members | length }}{% endfor %}
+

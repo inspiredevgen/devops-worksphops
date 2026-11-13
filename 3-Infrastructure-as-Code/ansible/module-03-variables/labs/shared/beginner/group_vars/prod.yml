@@ -1,0 +1,6 @@
+---
+# EN: prod: no banner color screaming at customers, real caching, compression, stable features only.
+# FR : prod : cache réel, compression, fonctionnalités stables seulement.
+banner_color: "#1f2937"
+cache_max_age: 3600
+gzip_enabled: true

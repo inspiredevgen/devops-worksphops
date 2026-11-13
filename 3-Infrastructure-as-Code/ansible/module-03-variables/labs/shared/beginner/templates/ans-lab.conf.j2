@@ -1,0 +1,38 @@
+{{ ansible_managed | comment }}
+# Environment: {{ env_label }}
+server {
+    listen 80 default_server;
+    server_name _;
+    root {{ site_root }};
+    index index.html;
+    server_tokens off;
+
+    add_header X-Environment "{{ env_label }}" always;
+{% if cache_max_age | int > 0 %}
+    add_header Cache-Control "public, max-age={{ cache_max_age }}" always;
+{% else %}
+    add_header Cache-Control "no-store" always;
+{% endif %}
+{% if gzip_enabled | bool %}
+
+    gzip on;
+    gzip_types text/css application/javascript application/json image/svg+xml;
+{% endif %}
+
+    location = /healthz {
+        access_log off;
+        default_type text/plain;
+        return 200 "ok {{ env_label }}\n";
+    }
+{% if maintenance_mode | bool %}
+
+    # Maintenance: every page answers 503 except the health check.
+    location / {
+        return 503;
+    }
+    error_page 503 /maintenance.html;
+    location = /maintenance.html {
+        internal;
+    }
+{% endif %}
+}

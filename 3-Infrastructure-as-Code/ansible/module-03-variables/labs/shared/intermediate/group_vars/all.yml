@@ -1,0 +1,6 @@
+---
+# EN: Shared by every host. / FR : Commun à tous les hôtes.
+ops_user: ops
+# EN: Instance metadata service (same link-local address on AWS and Azure). Overridable for tests.
+# FR : Service de métadonnées d'instance (même adresse lien-local sur AWS et Azure). Surchargeable pour les tests.
+imds_url: http://169.254.169.254

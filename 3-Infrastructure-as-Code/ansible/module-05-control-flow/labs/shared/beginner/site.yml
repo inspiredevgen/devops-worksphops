@@ -1,0 +1,70 @@
+---
+# =============================================================================
+# Lab 5.B — One playbook, two distributions: nginx + a release on Ubuntu AND Amazon Linux 2023 / AlmaLinux.
+#   cd labs/<cloud>/beginner && ansible-playbook ../../shared/beginner/site.yml
+# Lab 5.B — Un playbook, deux distributions : nginx + une version sur Ubuntu ET Amazon Linux 2023 / AlmaLinux.
+# =============================================================================
+- name: Web servers on any supported distribution
+  hosts: all
+  become: true
+
+  vars:
+    web_root: /var/www/ans-lab
+    web_vars_dir: "{{ playbook_dir }}/../web/vars"
+    web_templates: "{{ playbook_dir }}/../web/templates"
+    release_version: v1
+    # EN: Users to create: a dict, looped with dict2items. / FR : Utilisateurs à créer : un dictionnaire, parcouru avec dict2items.
+    lab_users:
+      deploy: {comment: Deployments, shell: /bin/bash}
+      audit: {comment: Read-only audits, shell: /usr/sbin/nologin}
+
+  tasks:
+    - name: Install and configure nginx for this distribution
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/../web/tasks/platform.yml"
+
+    - name: Create the lab users
+      ansible.builtin.user:
+        name: "{{ item.key }}"
+        comment: "{{ item.value.comment }}"
+        shell: "{{ item.value.shell }}"
+      loop: "{{ lab_users | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"     # EN: print the name, not the whole dict / FR : affiche le nom, pas tout le dictionnaire
+
+    - name: Deploy the release
+      ansible.builtin.include_tasks: "{{ playbook_dir }}/../web/tasks/release.yml"
+
+    - name: Start nginx now and at boot
+      ansible.builtin.service:
+        name: nginx
+        state: started
+        enabled: true
+
+    - name: Apply pending reloads
+      ansible.builtin.meta: flush_handlers
+
+    # EN: until/retries: poll instead of sleeping a fixed time; stop as soon as it's healthy.
+    # FR : until/retries : interroger au lieu d'attendre un temps fixe ; s'arrêter dès que c'est sain.
+    - name: Wait until the site is healthy on the host
+      ansible.builtin.uri:
+        url: http://127.0.0.1/healthz
+        return_content: true
+      register: health
+      until: health.status == 200
+      retries: 10
+      delay: 2
+
+    - name: The release answers from the control node
+      ansible.builtin.uri:
+        url: "http://{{ ansible_host }}/"
+        return_content: true
+      register: page
+      delegate_to: localhost
+      become: false
+      failed_when: release_version not in page.content or inventory_hostname not in page.content
+
+  handlers:
+    - name: Reload nginx
+      ansible.builtin.service:
+        name: nginx
+        state: reloaded

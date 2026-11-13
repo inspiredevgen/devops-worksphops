@@ -1,0 +1,102 @@
+---
+# =============================================================================
+# Lab 7.A-AZ — Patch with a safety net: snapshot the OS disk FIRST, patch, verify; keep the last N snapshots.
+#   One host at a time, the first failure stops everything.
+#   ansible-playbook ../../shared/advanced/azure/patch-with-snapshot.yml           (default: the static web servers)
+# Lab 7.A-AZ — Corriger avec un filet : instantané du disque OS D'ABORD, corriger, vérifier ; garder les N derniers.
+# =============================================================================
+- name: Patch with a pre-patch snapshot
+  hosts: "{{ target | default('role_web:!vmss_web') }}"
+  become: true
+  serial: 1
+  max_fail_percentage: 0
+
+  vars:
+    snapshot_keep: 3
+    # EN: Snapshot names must be unique and ≤ 80 chars. / FR : Noms d'instantané uniques, 80 caractères max.
+    snapshot_prefix: "snap-prepatch-{{ inventory_hostname }}-"
+
+  pre_tasks:
+    # EN: Every call runs on the control node: "id" and "resource_group" come from the inventory.
+    # FR : Chaque appel s'exécute sur le nœud de contrôle : « id » et « resource_group » viennent de l'inventaire.
+    - name: Find the disks of this VM
+      azure.azcollection.azure_rm_manageddisk_info:
+        resource_group: "{{ resource_group }}"
+      register: vm_disks
+      delegate_to: localhost
+      become: false
+
+    - name: Pick the OS disk (the one with an os_type)
+      ansible.builtin.set_fact:
+        os_disk: >-
+          {{ vm_disks.ansible_info.azure_managed_disk
+             | selectattr('managed_by', 'defined')
+             | selectattr('managed_by', 'string')
+             | selectattr('managed_by', 'search', '/' ~ name ~ '$', ignorecase=true)
+             | selectattr('os_type', 'truthy')
+             | first }}
+
+    - name: Snapshot the OS disk before touching anything
+      azure.azcollection.azure_rm_snapshot:
+        resource_group: "{{ resource_group }}"
+        name: "{{ snapshot_prefix }}{{ now(utc=true).strftime('%Y%m%d%H%M') }}"
+        location: "{{ location }}"
+        incremental: true
+        creation_data:
+          create_option: Copy
+          source_id: "{{ os_disk.id }}"
+        tags:
+          Course: ansible-cloud-engineer
+          Purpose: pre-patch
+          Host: "{{ inventory_hostname }}"
+      register: pre_patch_snapshot
+      delegate_to: localhost
+      become: false
+
+  tasks:
+    - name: Patch, or explain how to roll back
+      block:
+        - name: Patch and verify
+          ansible.builtin.include_tasks: ../tasks/patch-os.yml
+
+      rescue:
+        # EN: Rolling back means a new disk from the snapshot, swapped in while the VM is stopped: a human decides.
+        # FR : Revenir en arrière = un nouveau disque depuis l'instantané, échangé VM arrêtée : un humain décide.
+        - name: Explain the rollback
+          ansible.builtin.debug:
+            msg:
+              - "{{ inventory_hostname }} failed: {{ ansible_failed_task.name }}"
+              - "Roll back the OS disk to the pre-patch snapshot:"
+              - "az disk create -g {{ resource_group }} -n {{ os_disk.name }}-restored --source {{ pre_patch_snapshot.id }}"
+              - "az vm deallocate -g {{ resource_group }} -n {{ name }}"
+              - "az vm update -g {{ resource_group }} -n {{ name }} --os-disk {{ os_disk.name }}-restored"
+              - "az vm start -g {{ resource_group }} -n {{ name }}"
+              - "Then tell Terraform: the OS disk name changed (terraform plan shows it; plan a -replace or an import)."
+
+        - name: Stop the rollout
+          ansible.builtin.fail:
+            msg: "Patching failed on {{ inventory_hostname }}; {{ pre_patch_snapshot.id | basename }} is the way back."
+
+  post_tasks:
+    - name: Find this host's pre-patch snapshots
+      azure.azcollection.azure_rm_snapshot_info:
+        resource_group: "{{ resource_group }}"
+        tags:
+          - Purpose:pre-patch
+          - "Host:{{ inventory_hostname }}"
+      register: old_snapshots
+      delegate_to: localhost
+      become: false
+
+    # EN: The timestamp is in the name, so sorting by name = sorting by date.
+    # FR : L'horodatage est dans le nom : trier par nom = trier par date.
+    - name: Prune pre-patch snapshots, keep the newest {{ snapshot_keep }}
+      azure.azcollection.azure_rm_snapshot:
+        resource_group: "{{ resource_group }}"
+        name: "{{ item.name }}"
+        state: absent
+      loop: "{{ (old_snapshots.state | selectattr('name', 'match', snapshot_prefix) | sort(attribute='name', reverse=true))[snapshot_keep:] }}"
+      loop_control:
+        label: "{{ item.name }}"
+      delegate_to: localhost
+      become: false

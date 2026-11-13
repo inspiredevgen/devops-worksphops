@@ -1,0 +1,36 @@
+---
+# =============================================================================
+# EN: Handoff "Terraform outputs → inventory": read the ansible_hosts output and create the hosts in memory.
+#     Inputs: tf_project_dir (the Terraform folder), tf_binary (terraform or tofu).
+# FR : Relais « sorties Terraform → inventaire » : lire la sortie ansible_hosts et créer les hôtes en mémoire.
+# =============================================================================
+- name: Read the ansible_hosts output of the Terraform project
+  cloud.terraform.terraform_output:
+    project_path: "{{ tf_project_dir }}"
+    binary_path: "{{ tf_binary | default('terraform') }}"
+    name: ansible_hosts
+  register: tf_hosts
+
+- name: Refuse an empty handoff
+  ansible.builtin.assert:
+    that: tf_hosts.value | default({}, true) | length > 0
+    fail_msg: "No hosts in the ansible_hosts output of {{ tf_project_dir }}: was it applied with a preset?"
+    quiet: true
+
+# EN: add_host runs ONCE (not per host) and adds hosts to the in-memory inventory for the following plays.
+# FR : add_host s'exécute UNE fois (pas par hôte) et ajoute les hôtes à l'inventaire en mémoire pour les plays suivants.
+- name: Add every Terraform host to the inventory, with its groups
+  ansible.builtin.add_host:
+    name: "{{ item.key }}"
+    ansible_host: "{{ item.value.address }}"
+    ansible_port: "{{ item.value.port | default(22) }}"
+    ansible_user: "{{ item.value.user }}"
+    groups:
+      - tf_hosts
+      - "role_{{ item.value.role }}"
+      - "env_{{ item.value.environment }}"
+      - "os_{{ item.value.os }}"
+  loop: "{{ tf_hosts.value | dict2items }}"
+  loop_control:
+    label: "{{ item.key }} → {{ item.value.address }}"
+  changed_when: false

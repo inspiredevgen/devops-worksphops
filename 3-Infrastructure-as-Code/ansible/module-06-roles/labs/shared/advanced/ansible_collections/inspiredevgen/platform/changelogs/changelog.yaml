@@ -1,0 +1,17 @@
+ancestor: null
+releases:
+  1.0.0:
+    changes:
+      release_summary: First release of the platform collection - the baseline and
+        web roles from Module 6, and release-name filters.
+    fragments:
+    - v1.0.0-summary.yml
+    plugins:
+      filter:
+      - description: The release just before a given one
+        name: release_previous
+        namespace: null
+      - description: Sort release names naturally (v1.9 before v1.10)
+        name: release_sort
+        namespace: null
+    release_date: '2026-11-12'

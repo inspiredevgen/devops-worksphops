@@ -1,0 +1,36 @@
+---
+# EN: AWS: tag KEYS at /latest/meta-data/tags/instance (one per line), then one GET per key.
+#     Requires instance_metadata_tags = "enabled" (set by lab-hosts/aws).
+# FR : AWS : les CLÉS d'étiquettes à /latest/meta-data/tags/instance (une par ligne), puis un GET par clé.
+- name: Get an IMDSv2 session token
+  ansible.builtin.uri:
+    url: "{{ imds_url }}/latest/api/token"
+    method: PUT
+    headers:
+      X-aws-ec2-metadata-token-ttl-seconds: "300"
+    return_content: true
+  register: imds_token
+  no_log: true
+
+- name: List the instance tag keys
+  ansible.builtin.uri:
+    url: "{{ imds_url }}/latest/meta-data/tags/instance"
+    headers:
+      X-aws-ec2-metadata-token: "{{ imds_token.content }}"
+    return_content: true
+  register: tag_keys
+
+- name: Read each tag value
+  ansible.builtin.uri:
+    url: "{{ imds_url }}/latest/meta-data/tags/instance/{{ item }}"
+    headers:
+      X-aws-ec2-metadata-token: "{{ imds_token.content }}"
+    return_content: true
+  loop: "{{ tag_keys.content.splitlines() | select | list }}"
+  register: tag_values
+
+# EN: zip the keys with their values, then build a dict: [[k1, v1], [k2, v2]] → {k1: v1, k2: v2}
+# FR : associer chaque clé à sa valeur, puis construire un dictionnaire
+- name: Build the tag dictionary
+  ansible.builtin.set_fact:
+    cloud_tags: "{{ dict(tag_values.results | map(attribute='item') | zip(tag_values.results | map(attribute='content'))) }}"

@@ -1,0 +1,6 @@
+---
+# EN: Everything that is true for the WHOLE dev environment. / FR : Tout ce qui est vrai pour TOUT l'environnement dev.
+deploy_env: dev
+confirm_required: false
+release_channel: edge
+motd_warning: "DEV environment: break things here, not in prod."

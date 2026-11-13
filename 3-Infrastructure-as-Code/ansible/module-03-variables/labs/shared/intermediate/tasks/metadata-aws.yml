@@ -1,0 +1,31 @@
+---
+# EN: AWS IMDSv2: PUT for a short-lived session token, then GET with the token. Our hosts REQUIRE v2.
+# FR : AWS IMDSv2 : PUT pour un jeton de session éphémère, puis GET avec le jeton. Nos hôtes EXIGENT la v2.
+- name: Get an IMDSv2 session token
+  ansible.builtin.uri:
+    url: "{{ imds_url }}/latest/api/token"
+    method: PUT
+    headers:
+      X-aws-ec2-metadata-token-ttl-seconds: "300"
+    return_content: true
+  register: imds_token
+  no_log: true          # EN: never print credentials-like values / FR : ne jamais afficher de jetons
+
+- name: Read the instance identity document
+  ansible.builtin.uri:
+    url: "{{ imds_url }}/latest/dynamic/instance-identity/document"
+    headers:
+      X-aws-ec2-metadata-token: "{{ imds_token.content }}"
+    return_content: true
+  register: imds_identity
+
+- name: Normalise the AWS metadata
+  ansible.builtin.set_fact:
+    instance:
+      provider: aws
+      id: "{{ imds_identity.json.instanceId }}"
+      type: "{{ imds_identity.json.instanceType }}"
+      region: "{{ imds_identity.json.region }}"
+      zone: "{{ imds_identity.json.availabilityZone }}"
+      private_ip: "{{ imds_identity.json.privateIp }}"
+      image: "{{ imds_identity.json.imageId }}"

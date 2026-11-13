@@ -1,0 +1,4 @@
+{{ ansible_managed | comment }}
+  ==== {{ deploy_env | upper }} ==== {{ inventory_hostname }} ({{ role_tag }}) on {{ cloud | upper }}
+  {{ motd_warning }}
+  Release channel: {{ release_channel }}

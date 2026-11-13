@@ -1,0 +1,34 @@
+---
+# =============================================================================
+# EN: Put one release on disk and make it "current". Shared by the three Module 5 labs.
+#     Inputs: release_version, web_root, release_mark_healthy (default true), release_fault (lab fault injection).
+# FR : Installe une version sur le disque et la rend « current ». Commun aux trois labs du module 5.
+# =============================================================================
+- name: Create the release directory
+  ansible.builtin.file:
+    path: "{{ web_root }}/releases/{{ release_version }}"
+    state: directory
+    mode: "0755"
+
+# EN: Fault injection: a release that forgot its page (Lab 5.I). / FR : Injection de panne : une version sans page.
+- name: Publish the release page
+  ansible.builtin.template:
+    src: "{{ web_templates }}/index.html.j2"
+    dest: "{{ web_root }}/releases/{{ release_version }}/index.html"
+    mode: "0644"
+  when: release_fault | default('none') != 'missing-page'
+
+- name: Switch "current" to this release (atomic symlink swap)
+  ansible.builtin.file:
+    src: "{{ web_root }}/releases/{{ release_version }}"
+    dest: "{{ web_root }}/current"
+    state: link
+    force: true
+  register: release_link
+
+- name: Mark the host healthy for the load balancer
+  ansible.builtin.copy:
+    dest: "{{ web_root }}/health/ok"
+    content: "ok {{ release_version }}\n"
+    mode: "0644"
+  when: release_mark_healthy | default(true) | bool

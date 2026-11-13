@@ -1,0 +1,27 @@
+---
+# =============================================================================
+# EN: The collection's identity card. "namespace.name" is how everyone will call it: inspiredevgen.platform.
+#     Rename the namespace to YOUR GitHub user/organisation if you publish it.
+# FR : La carte d'identité de la collection. « namespace.name » est son nom pour tout le monde : inspiredevgen.platform.
+# =============================================================================
+namespace: inspiredevgen
+name: platform
+version: 1.1.0                       # EN: semantic versioning: MAJOR.MINOR.PATCH / FR : versionnage sémantique
+readme: README.md
+authors:
+  - DevOps Workshops
+description: Baseline and web roles for the DevOps Workshops lab fleet, plus release-handling filters.
+license:
+  - MIT
+tags: [web, nginx, linux, infrastructure]
+# EN: Collections this one needs: RANGES, so consumers can upgrade them independently.
+# FR : Les collections dont celle-ci a besoin : des PLAGES, pour que les utilisateurs puissent les mettre à jour.
+dependencies:
+  ansible.posix: ">=2.0.0,<3.0.0"
+  community.general: ">=11.0.0,<14.0.0"
+repository: https://github.com/inspiredevgen/ansible-platform-collection
+issues: https://github.com/inspiredevgen/ansible-platform-collection/issues
+build_ignore:
+  - tests/output
+  - "*.tar.gz"
+  - .git

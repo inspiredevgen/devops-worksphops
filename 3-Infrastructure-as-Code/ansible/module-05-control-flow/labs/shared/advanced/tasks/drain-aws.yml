@@ -1,0 +1,16 @@
+---
+# EN: AWS: deregister from the target group and WAIT until in-flight requests are done ("unused" after the
+#     deregistration delay). Runs on the control node: it is an AWS API call, not a change on the host.
+# FR : AWS : désinscrire du groupe cible et ATTENDRE la fin des requêtes en cours (« unused » après le délai
+#     de désinscription). S'exécute sur le nœud de contrôle : c'est un appel d'API AWS, pas un changement sur l'hôte.
+- name: Deregister from the ALB target group and wait for the drain
+  community.aws.elb_target:
+    target_group_name: "{{ lb_target_group }}"
+    target_id: "{{ instance_id }}"
+    target_port: 80
+    state: absent
+    target_status: unused
+    target_status_timeout: 120
+    region: "{{ aws_region }}"
+  delegate_to: localhost
+  become: false

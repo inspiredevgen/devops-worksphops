@@ -1,0 +1,8 @@
+---
+# EN: Ubuntu / Debian family. Loaded by include_vars + first_found (most specific file wins).
+# FR : Famille Ubuntu / Debian. Chargé par include_vars + first_found (le fichier le plus précis gagne).
+web_packages: [nginx, curl]
+web_nginx_user: www-data
+web_nginx_module_includes: [/etc/nginx/modules-enabled/*.conf]
+# EN: distribution files that would fight our config / FR : fichiers de la distribution qui entreraient en conflit
+web_nginx_remove: [/etc/nginx/sites-enabled/default]

@@ -1,0 +1,35 @@
+objects:
+  role:
+    baseline:
+      description: Baseline for every lab host
+      name: baseline
+      version_added: null
+    web:
+      description: nginx with atomic releases and a /healthz drain switch
+      name: web
+      version_added: null
+plugins:
+  become: {}
+  cache: {}
+  callback: {}
+  cliconf: {}
+  connection: {}
+  filter:
+    release_previous:
+      description: The release just before a given one
+      name: release_previous
+      version_added: 1.0.0
+    release_sort:
+      description: Sort release names naturally (v1.9 before v1.10)
+      name: release_sort
+      version_added: 1.0.0
+  httpapi: {}
+  inventory: {}
+  lookup: {}
+  module: {}
+  netconf: {}
+  shell: {}
+  strategy: {}
+  test: {}
+  vars: {}
+version: 1.0.0

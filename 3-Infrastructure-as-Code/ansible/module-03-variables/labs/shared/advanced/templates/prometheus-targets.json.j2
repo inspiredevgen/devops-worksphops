@@ -1,0 +1,10 @@
+{#- EN: Prometheus file_sd format: one target group per team, only hosts tagged Monitoring=on.
+    FR : Format file_sd de Prometheus : un groupe de cibles par équipe, seulement les hôtes étiquetés Monitoring=on. -#}
+{%- set groups = [] -%}
+{%- for team, members in fleet | selectattr('tags.Monitoring', 'equalto', 'on') | groupby('tags.Team') -%}
+{%-   set _ = groups.append({
+        'targets': members | map(attribute='private_ip') | map('regex_replace', '$', ':9100') | sort,
+        'labels': {'team': team, 'job': 'node'}
+      }) -%}
+{%- endfor -%}
+{{ groups | to_nice_json(indent=2) }}

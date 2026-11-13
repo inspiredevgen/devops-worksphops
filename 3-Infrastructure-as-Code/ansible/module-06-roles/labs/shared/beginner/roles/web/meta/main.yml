@@ -1,0 +1,18 @@
+---
+galaxy_info:
+  role_name: web
+  author: DevOps Workshops
+  description: nginx + atomic releases (current symlink, /healthz drain switch) on Ubuntu and the RHEL family
+  license: MIT
+  min_ansible_version: "2.21"
+  platforms:
+    - name: Ubuntu
+      versions: [noble]
+    - name: EL
+      versions: ["9"]
+    # EN: Galaxy's platform list stops at old Amazon Linux releases: "all" + the README say AL2023.
+    # FR : La liste de Galaxy s'arrête aux anciennes versions d'Amazon Linux : « all » + le README précisent AL2023.
+    - name: Amazon
+      versions: [all]
+  galaxy_tags: [web, nginx, release]
+dependencies: []

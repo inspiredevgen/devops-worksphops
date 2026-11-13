@@ -1,0 +1,21 @@
+---
+# =============================================================================
+# EN: Keep the newest web_keep_releases releases (and always the current one). The collection's own filter sorts
+#     them: a plain "sort" would delete v1.10 before v1.9.
+# FR : Garder les web_keep_releases versions les plus récentes (et toujours la courante). Le filtre de la collection
+#     les trie : un simple « sort » supprimerait v1.10 avant v1.9.
+# =============================================================================
+- name: List the releases on disk
+  ansible.builtin.find:
+    paths: "{{ web_site_root }}/releases"
+    file_type: directory
+  register: web_release_dirs
+
+- name: Delete the releases beyond the newest {{ web_keep_releases }}
+  ansible.builtin.file:
+    path: "{{ web_site_root }}/releases/{{ item }}"
+    state: absent
+  loop: >-
+    {{ (web_release_dirs.files | map(attribute='path') | map('basename') | list
+        | inspiredevgen.platform.release_sort(reverse=true))[web_keep_releases | int:]
+       | reject('equalto', web_release_version) | list }}

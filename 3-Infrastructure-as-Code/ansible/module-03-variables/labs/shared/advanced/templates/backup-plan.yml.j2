@@ -1,0 +1,5 @@
+---
+# {{ ansible_managed }}
+# EN: Built with json_query (JMESPath) from the Backup tag. / FR : Construit avec json_query (JMESPath) à partir de l'étiquette Backup.
+{% set plan = fleet | community.general.json_query("[?tags.Backup != 'none'].{host: name, schedule: tags.Backup, team: tags.Team, environment: tags.Environment}") | sort(attribute='host') %}
+{{ {'backups': plan} | to_nice_yaml(indent=2) }}

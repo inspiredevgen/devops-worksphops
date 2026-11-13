@@ -1,0 +1,15 @@
+---
+# EN: Azure: no API call. /healthz starts answering 503, the LB probe (every 5 s, 2 failures) takes the VM out of
+#     rotation, and we wait that long plus a margin. The backend pool itself never changes: Terraform owns it.
+# FR : Azure : aucun appel d'API. /healthz répond 503, la sonde (toutes les 5 s, 2 échecs) retire la VM de la
+#     rotation, et on attend ce délai plus une marge. Le pool lui-même ne change jamais : Terraform en est propriétaire.
+- name: Fail the health check on purpose
+  ansible.builtin.file:
+    path: "{{ web_root }}/health/ok"
+    state: absent
+
+- name: Wait for the load balancer probe to take this VM out
+  ansible.builtin.wait_for:
+    timeout: "{{ lb_probe_interval * lb_probe_count + lb_drain_margin }}"
+  delegate_to: localhost
+  become: false

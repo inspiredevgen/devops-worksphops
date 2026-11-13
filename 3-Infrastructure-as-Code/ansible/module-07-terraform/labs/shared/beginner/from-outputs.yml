@@ -1,0 +1,36 @@
+---
+# =============================================================================
+# Lab 7.B — Terraform builds, Ansible configures. The handoff is a Terraform OUTPUT, read at run time:
+#   no inventory file is written, nothing to keep in sync.
+#   cd labs/<cloud>/beginner
+#   ansible-playbook ../../shared/beginner/from-outputs.yml -e tf_project_dir=$(realpath ../../../../lab-hosts/<cloud>)
+# Lab 7.B — Terraform construit, Ansible configure. Le relais est une SORTIE Terraform, lue à l'exécution :
+#   aucun fichier d'inventaire écrit, rien à garder synchronisé.
+# =============================================================================
+- name: Handoff from Terraform (control node)
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Turn the Terraform output into inventory hosts
+      ansible.builtin.include_tasks: ../tasks/add-tf-hosts.yml
+
+- name: Wait until the new hosts are really ready
+  hosts: tf_hosts
+  gather_facts: false
+  tasks:
+    - name: SSH, then cloud-init, then facts
+      ansible.builtin.include_tasks: ../tasks/wait-ready.yml
+
+- name: Configure the web servers (Module 6 role)
+  hosts: role_web
+  become: true
+  roles:
+    - role: web
+      vars:
+        web_release_version: v1
+
+- name: Configure everything else (Module 6 role)
+  hosts: tf_hosts:!role_web
+  become: true
+  roles:
+    - role: baseline

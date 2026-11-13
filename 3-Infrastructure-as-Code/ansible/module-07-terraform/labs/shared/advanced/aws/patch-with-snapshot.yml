@@ -1,0 +1,78 @@
+---
+# =============================================================================
+# Lab 7.A-AWS — Patch with a safety net: snapshot the root volume FIRST, patch, verify; keep the last N snapshots.
+#   One host at a time, the first failure stops everything.
+#   ansible-playbook ../../shared/advanced/aws/patch-with-snapshot.yml            (default: the static web servers)
+# Lab 7.A-AWS — Corriger avec un filet : instantané du volume racine D'ABORD, corriger, vérifier ; garder les N derniers.
+# =============================================================================
+- name: Patch with a pre-patch snapshot
+  hosts: "{{ target | default('role_web:!asg_ans_lab_web_asg') }}"
+  become: true
+  serial: 1
+  max_fail_percentage: 0
+
+  vars:
+    aws_region: ca-central-1
+    snapshot_keep: 3
+
+  pre_tasks:
+    # EN: An API call from the control node, about THIS host's root volume (root_device_name comes from the inventory).
+    # FR : Un appel d'API depuis le nœud de contrôle, sur le volume racine de CET hôte.
+    - name: Snapshot the root volume before touching anything
+      amazon.aws.ec2_snapshot:
+        instance_id: "{{ instance_id }}"
+        device_name: "{{ root_device_name }}"
+        description: "pre-patch {{ inventory_hostname }} {{ now(utc=true).isoformat(timespec='minutes') }}"
+        snapshot_tags:
+          Course: ansible-cloud-engineer
+          Purpose: pre-patch
+          Host: "{{ inventory_hostname }}"
+        wait: true
+        wait_timeout: 1200
+        region: "{{ aws_region }}"
+      register: pre_patch_snapshot
+      delegate_to: localhost
+      become: false
+
+  tasks:
+    - name: Patch, or explain how to roll back
+      block:
+        - name: Patch and verify
+          ansible.builtin.include_tasks: ../tasks/patch-os.yml
+
+      rescue:
+        # EN: Restoring a root volume replaces the disk: a human decides. Give them the exact command.
+        # FR : Restaurer un volume racine remplace le disque : un humain décide. On lui donne la commande exacte.
+        - name: Explain the rollback
+          ansible.builtin.debug:
+            msg:
+              - "{{ inventory_hostname }} failed: {{ ansible_failed_task.name }}"
+              - "Roll back the root volume to the pre-patch snapshot (the instance reboots):"
+              - "aws ec2 create-replace-root-volume-task --instance-id {{ instance_id }} --snapshot-id {{ pre_patch_snapshot.snapshot_id }}"
+
+        - name: Stop the rollout
+          ansible.builtin.fail:
+            msg: "Patching failed on {{ inventory_hostname }}; snapshot {{ pre_patch_snapshot.snapshot_id }} is the way back."
+
+  post_tasks:
+    - name: Find this host's pre-patch snapshots
+      amazon.aws.ec2_snapshot_info:
+        filters:
+          "tag:Course": ansible-cloud-engineer
+          "tag:Purpose": pre-patch
+          "tag:Host": "{{ inventory_hostname }}"
+        region: "{{ aws_region }}"
+      register: old_snapshots
+      delegate_to: localhost
+      become: false
+
+    - name: Prune pre-patch snapshots, keep the newest {{ snapshot_keep }}
+      amazon.aws.ec2_snapshot:
+        snapshot_id: "{{ item.snapshot_id }}"
+        state: absent
+        region: "{{ aws_region }}"
+      loop: "{{ (old_snapshots.snapshots | sort(attribute='start_time', reverse=true))[snapshot_keep:] }}"
+      loop_control:
+        label: "{{ item.snapshot_id }} ({{ item.start_time }})"
+      delegate_to: localhost
+      become: false

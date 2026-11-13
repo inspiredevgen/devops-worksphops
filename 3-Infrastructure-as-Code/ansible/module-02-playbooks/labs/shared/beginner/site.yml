@@ -1,0 +1,50 @@
+---
+# =============================================================================
+# Lab 2.B — Your first playbook: an nginx web server (reference solution).
+# Lab 2.B — Votre premier playbook : un serveur web nginx (solution de référence).
+#   cd labs/<cloud>/beginner && ansible-playbook ../../shared/beginner/site.yml
+# =============================================================================
+- name: Install and start an nginx web server   # EN: a PLAY maps hosts to tasks / FR : un PLAY associe des hôtes à des tâches
+  hosts: web
+  become: true                                  # EN: every task runs with sudo / FR : chaque tâche s'exécute avec sudo
+
+  tasks:
+    - name: Install nginx (refresh the apt cache if older than 1 hour)
+      ansible.builtin.apt:
+        name: nginx
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Publish the home page
+      ansible.builtin.copy:
+        dest: /var/www/html/index.html
+        owner: root
+        group: root
+        mode: "0644"            # EN: QUOTE file modes: 0644 unquoted is the octal NUMBER 420 / FR : citez les modes
+        content: |
+          <!doctype html>
+          <html lang="en">
+            <head><meta charset="utf-8"><title>Ansible lab</title></head>
+            <body>
+              <h1>Hello from {{ inventory_hostname }}</h1>
+              <p>Deployed by Ansible · {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}</p>
+            </body>
+          </html>
+
+    - name: Start nginx now and at every boot
+      ansible.builtin.service:
+        name: nginx
+        state: started
+        enabled: true
+
+    # EN: Test from YOUR machine, like a user would: the request leaves the control node.
+    # FR : Testez depuis VOTRE machine, comme un utilisateur : la requête part du nœud de contrôle.
+    - name: The page answers from the control node
+      ansible.builtin.uri:
+        url: "http://{{ ansible_host }}/"
+        return_content: true
+      register: page
+      delegate_to: localhost
+      become: false
+      failed_when: inventory_hostname not in page.content

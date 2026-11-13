@@ -1,0 +1,13 @@
+---
+# =============================================================================
+# EN: This project's collections. inspiredevgen.platform comes from YOUR git repo, pinned to a TAG:
+#     upgrading = changing "version", in a reviewed commit.
+#       ansible-galaxy collection install -r requirements.yml -p ./collections --force
+#     Local practice without GitHub: name: file:///tmp/platform-collection.git  (see the guide)
+# FR : Les collections de ce projet. inspiredevgen.platform vient de VOTRE dépôt git, épinglée sur une ÉTIQUETTE :
+#     mettre à jour = changer « version », dans un commit revu.
+# =============================================================================
+collections:
+  - name: https://github.com/<your-user>/ansible-platform-collection.git
+    type: git
+    version: v1.0.0

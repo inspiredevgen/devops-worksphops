@@ -1,0 +1,31 @@
+---
+# =============================================================================
+# EN: The role's CONTRACT. Ansible checks it before the first task of the role and fails with a clear message.
+#     It also documents the role: ansible-doc -t role -r roles baseline
+# FR : Le CONTRAT du rôle. Ansible le vérifie avant la première tâche du rôle et échoue avec un message clair.
+#     Il documente aussi le rôle : ansible-doc -t role -r roles baseline
+# =============================================================================
+argument_specs:
+  main:
+    short_description: Baseline for every lab host
+    description:
+      - Installs common packages, creates admin users in the right group (sudo or wheel), sets the time zone and the message of the day.
+    options:
+      baseline_extra_packages:
+        type: list
+        elements: str
+        default: []
+        description: Packages to install on top of the per-family list.
+      baseline_admin_users:
+        type: list
+        elements: str
+        default: [ops]
+        description: Users added to the administrators group (sudo on Debian, wheel on RedHat).
+      baseline_motd_message:
+        type: str
+        default: Authorised use only. Activity may be logged.
+        description: Line shown in /etc/motd.
+      baseline_timezone:
+        type: str
+        default: UTC
+        description: IANA time zone, for example America/Toronto.

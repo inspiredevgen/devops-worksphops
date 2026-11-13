@@ -1,0 +1,62 @@
+---
+# =============================================================================
+# Lab 7.A-AWS — Capture a "golden" AMI from a configured web server, keep the newest N, print the handoff to Terraform.
+#   ansible-playbook ../../shared/advanced/aws/golden-image.yml                 (source: web1)
+#   ⚠️ no_reboot: false REBOOTS the source for a consistent file system: take it out of rotation first (Module 5).
+# Lab 7.A-AWS — Capturer une AMI « de référence » depuis un serveur web configuré, garder les N plus récentes.
+# =============================================================================
+- name: Golden image from a configured instance
+  hosts: "{{ image_source | default('web1') }}"
+  gather_facts: false
+
+  vars:
+    aws_region: ca-central-1
+    image_keep: 2
+    image_name: "ans-lab-web-{{ now(utc=true).strftime('%Y%m%d-%H%M') }}"
+
+  tasks:
+    - name: Create the AMI (reboots the source for consistency)
+      amazon.aws.ec2_ami:
+        instance_id: "{{ instance_id }}"
+        name: "{{ image_name }}"
+        description: "Golden web image captured by Ansible from {{ inventory_hostname }}"
+        no_reboot: false
+        wait: true
+        wait_timeout: 1800
+        tags:
+          Course: ansible-cloud-engineer
+          Purpose: golden
+          Role: web
+          Source: "{{ inventory_hostname }}"
+        region: "{{ aws_region }}"
+      register: golden
+      delegate_to: localhost
+
+    - name: List our golden images
+      amazon.aws.ec2_ami_info:
+        owners: [self]
+        filters:
+          "tag:Course": ansible-cloud-engineer
+          "tag:Purpose": golden
+        region: "{{ aws_region }}"
+      register: golden_images
+      delegate_to: localhost
+
+    - name: Prune old images and their snapshots, keep the newest {{ image_keep }}
+      amazon.aws.ec2_ami:
+        image_id: "{{ item.image_id }}"
+        state: absent
+        delete_snapshot: true
+        region: "{{ aws_region }}"
+      loop: "{{ (golden_images.images | sort(attribute='creation_date', reverse=true))[image_keep:] }}"
+      loop_control:
+        label: "{{ item.name }}"
+      delegate_to: localhost
+
+    # EN: The handoff goes back to Terraform: a launch template reads the newest golden image by tag.
+    # FR : Le relais repart vers Terraform : un modèle de lancement lit l'image de référence la plus récente par étiquette.
+    - name: Hand the image back to Terraform
+      ansible.builtin.debug:
+        msg:
+          - "AMI {{ golden.image_id }} ({{ image_name }}) is ready."
+          - 'Terraform: data "aws_ami" "golden" { most_recent = true, owners = ["self"], filter { name = "tag:Purpose", values = ["golden"] } }'

@@ -1,0 +1,86 @@
+---
+# =============================================================================
+# EN: nginx on any supported distribution. In a role, include_vars, template and copy look in the role's
+#     own vars/, templates/ and files/ first: no more "{{ playbook_dir }}/../web/…" paths.
+# FR : nginx sur toute distribution prise en charge. Dans un rôle, include_vars, template et copy cherchent
+#     d'abord dans vars/, templates/ et files/ du rôle : fini les chemins « {{ playbook_dir }}/../web/… ».
+# =============================================================================
+- name: Refuse unsupported OS families
+  ansible.builtin.assert:
+    that: ansible_facts['os_family'] in ['Debian', 'RedHat']
+    fail_msg: "{{ ansible_facts['distribution'] }} ({{ ansible_facts['os_family'] }}) is not supported"
+    quiet: true
+
+# EN: first_found: the MOST specific file wins: Amazon.yml for AL2023, else RedHat.yml / Debian.yml.
+# FR : first_found : le fichier le PLUS précis gagne : Amazon.yml pour AL2023, sinon RedHat.yml / Debian.yml.
+- name: Load the variables for this distribution
+  ansible.builtin.include_vars: "{{ lookup('ansible.builtin.first_found', params) }}"
+  vars:
+    params:
+      files:
+        - "{{ ansible_facts['distribution'] }}-{{ ansible_facts['distribution_major_version'] }}.yml"
+        - "{{ ansible_facts['distribution'] }}.yml"
+        - "{{ ansible_facts['os_family'] }}.yml"
+      paths:
+        - "{{ role_path }}/vars"
+
+- name: Refresh the apt cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+  when: ansible_facts['os_family'] == 'Debian'
+
+# EN: A LIST in one task, not a loop: one package transaction instead of one per package.
+# FR : Une LISTE en une tâche, pas une boucle : une seule transaction au lieu d'une par paquet.
+- name: Install the web packages
+  ansible.builtin.package:
+    name: "{{ web_packages }}"
+    state: present
+
+- name: Create the site directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ web_site_root }}"
+    - "{{ web_site_root }}/releases"
+    - "{{ web_site_root }}/health"
+    - /var/log/ans-lab
+
+- name: Remove distribution defaults that conflict with our site
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop: "{{ web_nginx_remove }}"
+  notify: Reload nginx
+
+# EN: validate runs "nginx -t" on the NEW file before it replaces the old one: a broken config never lands.
+# FR : validate lance « nginx -t » sur le NOUVEAU fichier avant qu'il remplace l'ancien : une config cassée n'arrive jamais.
+- name: Install nginx.conf (validated)
+  ansible.builtin.template:
+    src: nginx.conf.j2
+    dest: /etc/nginx/nginx.conf
+    mode: "0644"
+    validate: nginx -t -c %s
+  notify: Reload nginx
+
+- name: Install the site
+  ansible.builtin.template:
+    src: site.conf.j2
+    dest: /etc/nginx/conf.d/ans-lab.conf
+    mode: "0644"
+  notify: Reload nginx
+
+- name: Collect service facts (for the firewall decision)
+  ansible.builtin.service_facts:
+
+# EN: Only where firewalld is actually running (some RHEL-family images); Ubuntu and AL2023 cloud images: skipped.
+# FR : Seulement là où firewalld tourne vraiment (certaines images famille RHEL) ; Ubuntu et AL2023 : sautée.
+- name: Open HTTP in firewalld when it is running
+  ansible.posix.firewalld:
+    service: http
+    state: enabled
+    permanent: true
+    immediate: true
+  when: ansible_facts['services']['firewalld.service']['state'] | default('') == 'running'

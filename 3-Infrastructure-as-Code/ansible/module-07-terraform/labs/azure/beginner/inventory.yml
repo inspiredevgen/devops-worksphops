@@ -1,0 +1,8 @@
+---
+# EN: Just the control node. The managed hosts are ADDED at run time from the Terraform output.
+# FR : Juste le nœud de contrôle. Les hôtes gérés sont AJOUTÉS à l'exécution depuis la sortie Terraform.
+all:
+  hosts:
+    localhost:
+      ansible_connection: local
+      ansible_python_interpreter: "{{ ansible_playbook_python }}"

@@ -1,0 +1,41 @@
+---
+# =============================================================================
+# EN: A read-only workload for measure-tuning.sh: 8 cheap tasks per host, no facts.
+#     The time is dominated by CONNECTIONS, which is what the tuning changes.
+# FR : Une charge en lecture seule pour measure-tuning.sh : 8 tâches légères par hôte, sans faits.
+#     Le temps est dominé par les CONNEXIONS, justement ce que les réglages changent.
+# =============================================================================
+- name: Benchmark workload
+  hosts: all
+  gather_facts: false
+
+  tasks:
+    - name: Ping
+      ansible.builtin.ping:
+
+    - name: Uptime
+      ansible.builtin.command: uptime
+      changed_when: false
+
+    - name: OS release
+      ansible.builtin.stat:
+        path: /etc/os-release
+
+    - name: Hostname
+      ansible.builtin.slurp:
+        src: /etc/hostname
+
+    - name: Who am I
+      ansible.builtin.command: id -un
+      changed_when: false
+
+    - name: Disk usage of /
+      ansible.builtin.command: df -h /
+      changed_when: false
+
+    - name: Kernel
+      ansible.builtin.command: uname -r
+      changed_when: false
+
+    - name: Ping again
+      ansible.builtin.ping:

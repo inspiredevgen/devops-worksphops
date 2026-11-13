@@ -1,0 +1,45 @@
+---
+# =============================================================================
+# Lab 6.A — A project that CONSUMES the inspiredevgen.platform collection (installed from a git tag).
+#   cd labs/<cloud>/advanced
+#   ansible-galaxy collection install -r requirements.yml -p ./collections --force
+#   ansible-playbook ../../shared/advanced/site.yml -e web_release_version=v2
+# Lab 6.A — Un projet qui UTILISE la collection inspiredevgen.platform (installée depuis une étiquette git).
+# =============================================================================
+- name: Baseline for the hosts that are not web servers
+  hosts: all:!role_web
+  become: true
+  roles:
+    - role: inspiredevgen.platform.baseline
+
+- name: Web servers from the collection
+  hosts: role_web
+  become: true
+  roles:
+    - role: inspiredevgen.platform.web
+
+- name: Report what this run used
+  hosts: role_web
+  gather_facts: false
+
+  vars:
+    platform_manifest: >-
+      {{ lookup('ansible.builtin.config', 'COLLECTIONS_PATHS') | first }}/ansible_collections/inspiredevgen/platform/MANIFEST.json
+
+  tasks:
+    - name: Collection version (read on the control node)
+      ansible.builtin.debug:
+        msg: "inspiredevgen.platform {{ (lookup('ansible.builtin.file', platform_manifest) | from_json).collection_info.version }}"
+      run_once: true
+
+    - name: List the releases on the host
+      ansible.builtin.find:
+        paths: "{{ web_site_root | default(web_root) | default('/var/www/ans-lab') }}/releases"
+        file_type: directory
+      register: releases_on_disk
+
+    # EN: The collection's own filter, used by its FQCN: v1.9 < v1.10, not v1.10 < v1.9.
+    # FR : Le filtre de la collection, appelé par son FQCN : v1.9 < v1.10, et non l'inverse.
+    - name: Releases in natural order (inspiredevgen.platform.release_sort)
+      ansible.builtin.debug:
+        msg: "{{ releases_on_disk.files | map(attribute='path') | map('basename') | inspiredevgen.platform.release_sort | join(' < ') }}"

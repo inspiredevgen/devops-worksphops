@@ -1,0 +1,36 @@
+<!doctype html>
+<!-- {{ ansible_managed }} -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{{ site_name }}{% if env_label != 'prod' %} ({{ env_label | upper }}){% endif %}</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; }
+    header { background: {{ banner_color }}; color: #fff; padding: 1rem 2rem; }
+    main { padding: 1rem 2rem; }
+    footer { font: 12px monospace; color: #6b7280; padding: 1rem 2rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>{{ site_name }}</h1>
+{% if env_label != 'prod' %}
+    <p>⚠️ {{ env_label | upper }} environment: not for customers</p>
+{% endif %}
+  </header>
+  <main>
+    <h2>Features</h2>
+    <ul>
+{% for feature in features | sort %}
+      <li>{{ feature | replace('-', ' ') | title }}</li>
+{% endfor %}
+    </ul>
+  </main>
+{% if show_debug_footer | bool %}
+  <footer>
+    host={{ inventory_hostname }} · {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}
+    · groups={{ group_names | join(',') }} · cache={{ cache_max_age }}s
+  </footer>
+{% endif %}
+</body>
+</html>

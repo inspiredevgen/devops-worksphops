@@ -1,0 +1,24 @@
+---
+# =============================================================================
+# EN: One view of the multi-cloud fleet, grouped by role, from the inventory alone (no host contacted).
+#       ansible-playbook ../../shared/advanced/multicloud-report.yml
+# FR : Une vue du parc multi-cloud, groupée par rôle, à partir du seul inventaire (aucun hôte contacté).
+# =============================================================================
+- name: Multi-cloud fleet report
+  hosts: all
+  gather_facts: false
+
+  tasks:
+    - name: Hosts per role, across clouds
+      ansible.builtin.debug:
+        msg: >-
+          {{ item }}: {{ groups[item] | map('extract', hostvars)
+             | map(attribute='cloud') | zip(groups[item]) | map('join', '/') | sort | join(', ') }}
+      loop: "{{ groups.keys() | select('match', '^role_') | sort }}"
+      run_once: true
+
+    - name: Totals per cloud
+      ansible.builtin.debug:
+        msg: "{{ item }}: {{ groups[item] | default([]) | length }} host(s)"
+      loop: [cloud_aws, cloud_azure]
+      run_once: true

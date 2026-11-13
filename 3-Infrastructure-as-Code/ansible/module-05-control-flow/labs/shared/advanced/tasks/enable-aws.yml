@@ -1,0 +1,14 @@
+---
+# EN: AWS: register again and wait until the ALB's own health check says "healthy".
+# FR : AWS : réinscrire et attendre que le contrôle de santé de l'ALB indique « healthy ».
+- name: Register in the ALB target group and wait until healthy
+  community.aws.elb_target:
+    target_group_name: "{{ lb_target_group }}"
+    target_id: "{{ instance_id }}"
+    target_port: 80
+    state: present
+    target_status: healthy
+    target_status_timeout: 120
+    region: "{{ aws_region }}"
+  delegate_to: localhost
+  become: false

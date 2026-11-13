@@ -1,0 +1,27 @@
+---
+# =============================================================================
+# Lab 6.I — Two validated roles: "baseline" on every host, "web" (which depends on baseline) on the web servers.
+#   cd labs/<cloud>/intermediate && ansible-playbook ../../shared/intermediate/site.yml -e web_release_version=v2
+# Lab 6.I — Deux rôles validés : « baseline » sur chaque hôte, « web » (qui dépend de baseline) sur les serveurs web.
+# =============================================================================
+- name: Baseline for the hosts that are not web servers
+  hosts: all:!role_web
+  become: true
+  roles:
+    - role: baseline
+
+- name: Web servers (baseline comes in as a dependency of web)
+  hosts: role_web
+  become: true
+
+  # EN: A role validates its arguments when IT starts, i.e. AFTER its dependencies already ran (and changed things).
+  #     Validate web's contract FIRST, from its own spec file, so a bad call changes nothing at all.
+  # FR : Un rôle valide ses arguments quand IL démarre, donc APRÈS ses dépendances (qui ont déjà modifié l'hôte).
+  #     On valide d'abord le contrat de web, à partir de son propre fichier, pour qu'un mauvais appel ne change rien.
+  pre_tasks:
+    - name: Validate the web role's arguments before anything runs
+      ansible.builtin.validate_argument_spec:
+        argument_spec: "{{ (lookup('ansible.builtin.file', playbook_dir ~ '/roles/web/meta/argument_specs.yml') | from_yaml).argument_specs.main.options }}"
+
+  roles:
+    - role: web

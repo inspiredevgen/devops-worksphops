@@ -1,0 +1,59 @@
+---
+# =============================================================================
+# EN: Grader for the data-transformation exercises (offline).
+#       ansible-playbook check-answers.yml                       # grades my-answers.yml
+#       ansible-playbook check-answers.yml -e answers=solutions/answers.yml
+#       ansible-playbook check-answers.yml -e only=q3            # one question
+# FR : Correcteur des exercices de transformation de données (hors ligne).
+# =============================================================================
+- name: Grade the transformation answers
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars_files:
+    - sample-fleet.yml
+    - "{{ answers | default('my-answers.yml') }}"
+
+  vars:
+    expected:
+      q1: [app1, app2, db1, idx1, web1, web2]
+      q2: 5
+      q3: {payments: 3, search: 2, storefront: 3}
+      q4: ["10.0.1.11:9100", "10.0.1.12:9100", "10.140.1.13:9100"]
+      q5: [app1, app2, db1, idx1]
+      q6:
+        web1: 10.0.1.11
+        web2: 10.0.1.12
+        web3: 10.140.1.13
+        app1: 10.0.2.21
+        app2: 10.140.2.22
+        db1: 10.0.3.31
+        db2: 10.140.3.32
+        idx1: 10.140.4.41
+      q7: [payments, search, storefront]
+      q8: db1
+    questions: "{{ [only] if only is defined else expected.keys() | sort }}"
+
+  tasks:
+    - name: Check each answer
+      ansible.builtin.assert:
+        that: answer == expected[item]
+        success_msg: "✅ {{ item }}"
+        fail_msg: >-
+          ❌ {{ item }}: got {{ answer | to_json }} ({{ answer | type_debug }}),
+          expected {{ expected[item] | to_json }}
+      vars:
+        answer: "{{ lookup('ansible.builtin.vars', item) }}"
+      loop: "{{ questions }}"
+      ignore_errors: true   # noqa: ignore-errors (EN: grade every question / FR : corriger chaque question)
+      register: graded
+
+    - name: Score
+      ansible.builtin.debug:
+        msg: "Score: {{ graded.results | rejectattr('failed') | list | length }}/{{ questions | length }}"
+
+    - name: Fail the run unless every question passes
+      ansible.builtin.assert:
+        that: graded.results | selectattr('failed') | list | length == 0
+        quiet: true

@@ -1,0 +1,3 @@
+{% for h in fleet | sort(attribute='name') %}
+{{ '%-15s' | format(h.private_ip) }} {{ h.name }} {{ h.tags.Role | default('norole') }}-{{ h.name }}.{{ h.tags.Environment | default('noenv') }}.lab
+{% endfor %}

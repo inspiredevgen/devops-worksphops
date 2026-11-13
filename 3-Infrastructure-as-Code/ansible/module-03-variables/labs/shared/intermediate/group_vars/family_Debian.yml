@@ -1,0 +1,7 @@
+---
+# EN: Loaded for hosts that "group_by" put in family_Debian (Ubuntu). No more if/else in the playbook.
+# FR : Chargé pour les hôtes que « group_by » a placés dans family_Debian (Ubuntu). Plus de if/else.
+baseline_packages: [cron, jq, unattended-upgrades]
+cron_service: cron
+ssh_service: ssh
+admin_group: sudo

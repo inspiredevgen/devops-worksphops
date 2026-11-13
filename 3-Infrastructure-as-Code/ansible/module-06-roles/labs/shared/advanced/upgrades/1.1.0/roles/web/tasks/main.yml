@@ -1,0 +1,50 @@
+---
+# =============================================================================
+# EN: Entry point: Ansible runs tasks/main.yml when the role is applied. Keep it a short table of contents.
+# FR : Point d'entrée : Ansible exécute tasks/main.yml quand le rôle est appliqué. Gardez-le court : une table des matières.
+# =============================================================================
+# EN: Role argument specs silently ignore removed_in_version / deprecated_aliases: warn explicitly.
+# FR : Les spécifications d'arguments de rôle ignorent removed_in_version / deprecated_aliases : on avertit soi-même.
+- name: "DEPRECATION: web_root is renamed web_site_root (web_root will be removed in 2.0.0)"
+  ansible.builtin.debug:
+    msg: >-
+      [DEPRECATED] inspiredevgen.platform.web: rename web_root to web_site_root in your variables.
+      web_root still works in 1.x and is REMOVED in 2.0.0.
+  when: web_root is defined
+
+- name: Install and configure nginx for this distribution
+  ansible.builtin.include_tasks: platform.yml
+
+- name: Create the lab users
+  ansible.builtin.user:
+    name: "{{ item.key }}"
+    comment: "{{ item.value.comment }}"
+    shell: "{{ item.value.shell }}"
+  loop: "{{ web_users | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: Deploy the release
+  ansible.builtin.include_tasks: release.yml
+
+- name: Remove old releases
+  ansible.builtin.include_tasks: cleanup.yml
+  when: web_keep_releases | int > 0
+
+- name: Start nginx now and at boot
+  ansible.builtin.service:
+    name: nginx
+    state: started
+    enabled: true
+
+- name: Apply pending reloads
+  ansible.builtin.meta: flush_handlers
+
+- name: Wait until the site is healthy on the host
+  ansible.builtin.uri:
+    url: http://127.0.0.1/healthz
+  register: web_health
+  until: web_health.status == 200
+  retries: 10
+  delay: 2
+  when: web_mark_healthy | bool

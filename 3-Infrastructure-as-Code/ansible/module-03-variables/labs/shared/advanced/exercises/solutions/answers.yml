@@ -1,0 +1,11 @@
+---
+# EN: One possible answer per question; others are valid if check-answers.yml passes.
+# FR : Une réponse possible par question ; d'autres sont valides si check-answers.yml réussit.
+q1: "{{ fleet | selectattr('tags.Monitoring', 'equalto', 'on') | map(attribute='name') | sort }}"
+q2: "{{ fleet | selectattr('tags.Environment', 'equalto', 'prod') | list | length }}"
+q3: "{{ dict(fleet | groupby('tags.Team') | map('first') | zip(fleet | groupby('tags.Team') | map('last') | map('length'))) }}"
+q4: "{{ fleet | selectattr('tags.Role', 'equalto', 'web') | map(attribute='private_ip') | map('regex_replace', '$', ':9100') | sort }}"
+q5: "{{ fleet | community.general.json_query(\"[?tags.Backup=='daily' || tags.Backup=='hourly'].name\") | sort }}"
+q6: "{{ fleet | items2dict(key_name='name', value_name='private_ip') }}"
+q7: "{{ fleet | map(attribute='tags.Team') | unique | sort }}"
+q8: "{{ fleet | selectattr('tags.Environment', 'equalto', 'prod') | selectattr('tags.Role', 'equalto', 'db') | map(attribute='name') | first }}"

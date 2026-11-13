@@ -1,0 +1,4 @@
+---
+# EN: vars/ = role INTERNALS (high precedence): not meant to be overridden. / FR : vars/ = INTERNES du rôle (priorité haute).
+baseline_packages: [jq, tree, unattended-upgrades]
+baseline_admin_group: sudo

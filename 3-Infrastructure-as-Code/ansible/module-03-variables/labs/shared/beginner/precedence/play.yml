@@ -1,0 +1,36 @@
+---
+# =============================================================================
+# EN: Where does "color" come from? PREDICT each line before running:
+#       ansible-playbook -i inventory.ini play.yml
+#       ansible-playbook -i inventory.ini play.yml -e color=from_extra_vars
+#     Then delete one source at a time (host_vars/web1.yml, group_vars/web.yml…) and predict again.
+# FR : D'où vient « color » ? PRÉDISEZ chaque ligne avant de lancer. Puis supprimez une source à la fois.
+# =============================================================================
+- name: Variable precedence
+  hosts: web
+  gather_facts: false
+
+  tasks:
+    - name: 1. Value from the inventory sources only
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }}: {{ color }}"
+
+    - name: 2. Task vars beat inventory variables
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }}: {{ color }}"
+      vars:
+        color: from_task_vars
+
+    - name: 3. set_fact (a host fact for the rest of the run)
+      ansible.builtin.set_fact:
+        color: from_set_fact
+
+    - name: 4. After set_fact
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }}: {{ color }}"
+
+    - name: 5. Task vars do NOT beat set_fact
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }}: {{ color }}"
+      vars:
+        color: from_task_vars_again

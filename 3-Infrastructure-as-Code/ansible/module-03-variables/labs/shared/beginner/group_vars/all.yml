@@ -1,0 +1,17 @@
+---
+# =============================================================================
+# EN: Defaults for EVERY host. Environment files (dev.yml, staging.yml, prod.yml) override only what differs.
+# FR : Valeurs par défaut pour TOUS les hôtes. Les fichiers d'environnement ne surchargent que ce qui diffère.
+# =============================================================================
+site_name: Ansible Lab Store
+site_root: /var/www/ans-lab
+
+# EN: Every environment gets these unless it overrides them. / FR : Chaque environnement les reçoit sauf surcharge.
+env_label: "{{ group_names | intersect(['dev', 'staging', 'prod']) | first | default('unknown') }}"
+banner_color: "#6b7280"
+show_debug_footer: false
+maintenance_mode: false
+cache_max_age: 0            # seconds; 0 = no-store
+gzip_enabled: false
+features:
+  - catalogue

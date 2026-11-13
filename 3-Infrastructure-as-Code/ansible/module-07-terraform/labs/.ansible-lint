@@ -1,0 +1,11 @@
+---
+# =============================================================================
+# EN: ansible-lint settings for the Module 7 labs. The playbooks reuse the Module 6 roles, so lint with them on the path:
+#       ANSIBLE_ROLES_PATH=$PWD/../../module-06-roles/labs/shared/intermediate/roles ansible-lint --profile production .
+#     No exceptions here: the one justified skip (package-latest when PATCHING) is a noqa on that line.
+# FR : Réglages d'ansible-lint pour les labs du module 7. Les playbooks réutilisent les rôles du module 6 : mettez-les
+#     sur le chemin. Aucune exception ici : le seul contournement justifié est un noqa sur la ligne concernée.
+# =============================================================================
+warn_list:
+  # EN: the rule's list of "supported" versions lags behind ansible-core 2.21 / FR : liste en retard sur 2.21
+  - meta-runtime[unsupported-version]

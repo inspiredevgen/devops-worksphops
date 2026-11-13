@@ -1,0 +1,32 @@
+---
+- name: Load the variables for this OS family
+  ansible.builtin.include_vars: "{{ ansible_facts['os_family'] }}.yml"
+
+- name: Refresh the apt cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+  when: ansible_facts['os_family'] == 'Debian'
+
+- name: Install the baseline packages
+  ansible.builtin.package:
+    name: "{{ baseline_packages + baseline_extra_packages }}"
+    state: present
+
+- name: Set the time zone
+  community.general.timezone:
+    name: "{{ baseline_timezone }}"
+
+- name: Create the admin users in this family's admin group
+  ansible.builtin.user:
+    name: "{{ item }}"
+    groups: "{{ baseline_admin_group }}"
+    append: true
+    shell: /bin/bash
+  loop: "{{ baseline_admin_users }}"
+
+- name: Message of the day
+  ansible.builtin.template:
+    src: motd.j2
+    dest: /etc/motd
+    mode: "0644"

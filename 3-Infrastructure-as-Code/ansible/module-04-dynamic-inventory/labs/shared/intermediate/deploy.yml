@@ -1,0 +1,71 @@
+---
+# =============================================================================
+# Lab 4.I — A deployment that knows which environment it is touching, and refuses mistakes.
+#   ansible-playbook ../../shared/intermediate/deploy.yml                          # dev (the default inventory)
+#   ansible-playbook ../../shared/intermediate/deploy.yml -i inventories/prod      # prod: asks for confirmation
+#   ansible-playbook ../../shared/intermediate/deploy.yml -i inventories/prod -e confirm=prod   # CI style
+# Lab 4.I — Un déploiement qui sait quel environnement il touche, et refuse les erreurs.
+# =============================================================================
+
+- name: Pre-flight safety checks (on the control node)
+  hosts: all
+  gather_facts: false
+  # EN: ONE failed check (one bad tag, a missing confirmation) stops the WHOLE run, for every host, before any change.
+  #     Without it, a failed run_once task only fails the host it ran on.
+  # FR : UNE vérification échouée (une étiquette fausse, une confirmation manquante) arrête TOUTE l'exécution,
+  #     pour tous les hôtes, avant tout changement. Sans cela, une tâche run_once échouée n'échoue que sur son hôte.
+  any_errors_fatal: true
+
+  tasks:
+    # EN: deploy_env comes from inventories/<env>/group_vars; env_tag comes from the CLOUD tag. They must agree.
+    # FR : deploy_env vient de inventories/<env>/group_vars ; env_tag vient de l'étiquette CLOUD. Ils doivent concorder.
+    - name: Every host's Environment tag matches the inventory it came from
+      ansible.builtin.assert:
+        that: env_tag == deploy_env
+        fail_msg: >-
+          {{ inventory_hostname }} is tagged Environment={{ env_tag | default('<missing>') }}
+          but was loaded by the {{ deploy_env }} inventory: fix the tag or the inventory filter.
+        quiet: true
+
+    - name: Show what is about to change
+      ansible.builtin.debug:
+        msg: "{{ deploy_env | upper }}: {{ ansible_play_hosts_all | length }} host(s): {{ ansible_play_hosts_all | sort | join(', ') }}"
+      run_once: true
+
+    # EN: Interactive runs ask a human. Non-interactive runs (CI) must pass -e confirm=<env>.
+    #     Without a terminal, pause returns an empty answer, so the assert below fails: safe by default.
+    # FR : Les exécutions interactives demandent à un humain. Sans terminal (CI), il faut -e confirm=<env>.
+    #     Sans terminal, pause renvoie une réponse vide, donc l'assert ci-dessous échoue : sûr par défaut.
+    - name: Ask for confirmation
+      ansible.builtin.pause:
+        prompt: "You are about to change {{ deploy_env | upper }}. Type the environment name to continue"
+      register: confirmation
+      run_once: true
+      when:
+        - confirm_required | bool
+        - confirm is not defined
+
+    - name: Refuse to continue without the right confirmation
+      ansible.builtin.assert:
+        that: (confirm | default(confirmation.user_input | default('') | trim)) == deploy_env
+        fail_msg: "Not confirmed: nothing was changed on {{ deploy_env }}."
+        success_msg: "Confirmed for {{ deploy_env }}."
+      run_once: true
+      when: confirm_required | bool
+
+- name: Deploy the environment banner
+  hosts: all
+  become: true
+
+  tasks:
+    - name: Message of the day for this environment
+      ansible.builtin.template:
+        src: motd.j2
+        dest: /etc/motd
+        mode: "0644"
+
+    - name: Record the environment on the host
+      ansible.builtin.copy:
+        dest: /etc/ans-lab-environment
+        mode: "0644"
+        content: "{{ deploy_env }}\n"

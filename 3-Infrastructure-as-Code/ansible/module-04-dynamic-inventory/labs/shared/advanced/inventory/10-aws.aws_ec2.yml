@@ -1,0 +1,39 @@
+---
+# =============================================================================
+# Lab 4.A — source 1/3: AWS. Translates EC2 tags into the course's TAG CONTRACT variables.
+# Lab 4.A — source 1/3 : AWS. Traduit les étiquettes EC2 dans les variables du CONTRAT D'ÉTIQUETTES du cours.
+# =============================================================================
+plugin: amazon.aws.aws_ec2
+regions:
+  - ca-central-1
+filters:
+  tag:Course: ansible-cloud-engineer
+  instance-state-name: running
+hostnames:
+  - tag:Host
+  - instance-id
+compose:
+  ansible_host: public_ip_address | default(private_ip_address, true)
+  ansible_user: "'ec2-user' if ec2_tags.OS | default('') == 'al2023' else 'ubuntu'"
+  cloud: "'aws'"
+  cloud_region: placement.region | default('ca-central-1')
+  # EN: THE CONTRACT: every source must produce these five variables. / FR : LE CONTRAT : chaque source doit produire ces cinq variables.
+  role_tag: ec2_tags.Role | default('')
+  env_tag: ec2_tags.Environment | default('')
+  os_tag: ec2_tags.OS | default('')
+  team_tag: ec2_tags.Team | default('')
+  host_tag: ec2_tags.Host | default('')
+# EN: Only AWS-specific groups here; the shared groups come from 90-constructed.yml.
+# FR : Seulement des groupes propres à AWS ici ; les groupes communs viennent de 90-constructed.yml.
+keyed_groups:
+  - key: placement.availability_zone
+    prefix: aws_az
+use_deprecated_tags: false
+strict: true
+
+# EN: Cache the API answer for 5 minutes: fast repeated runs, fewer API calls. Refresh: --flush-cache.
+# FR : Met en cache la réponse de l'API 5 minutes : exécutions répétées rapides, moins d'appels. Rafraîchir : --flush-cache.
+cache: true
+cache_plugin: ansible.builtin.jsonfile
+cache_connection: ~/.cache/ansible-course/inventory
+cache_timeout: 300

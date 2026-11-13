@@ -1,0 +1,17 @@
+---
+# EN: Defaults for optional options. web_release_version has NO default: argument_specs makes it required.
+# FR : Valeurs par défaut des options facultatives. web_release_version n'en a PAS : argument_specs la rend obligatoire.
+
+# EN: 1.1.0: web_root is renamed web_site_root. Callers that still set web_root keep working (with a warning)
+#     until 2.0.0, because the new name defaults to the old one.
+# FR : 1.1.0 : web_root devient web_site_root. Les appels qui définissent encore web_root fonctionnent (avec un
+#     avertissement) jusqu'à la 2.0.0, car le nouveau nom prend par défaut la valeur de l'ancien.
+web_site_root: "{{ web_root | default('/var/www/ans-lab') }}"
+web_keep_releases: 3
+web_listen_port: 80
+web_mark_healthy: true
+web_log_level: warn
+web_users:
+  deploy: {comment: Deployments, shell: /bin/bash}
+  audit: {comment: Read-only audits, shell: /usr/sbin/nologin}
+web_site_extra_directives: []
