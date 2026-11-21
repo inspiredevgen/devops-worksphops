@@ -62,6 +62,7 @@ By the end of this lab you will be able to:
                  └────────────────────┴────────────── GitHub: terraform-small-project ─────────────┘
 ```
 
+![AWS Architecture Diagram](img/aws-arch.jpeg)
 ### Environment matrix
 
 | Setting | DEV | PROD | Why they differ |
