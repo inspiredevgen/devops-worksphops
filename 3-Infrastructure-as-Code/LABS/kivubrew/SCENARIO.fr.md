@@ -1,4 +1,5 @@
 # 🏗️ Lab Terraform en équipe — « KivuBrew passe en production »
+
 ### Deux environnements, un seul code : déployer une application web statique sur EC2 derrière un bastion
 
 > **Niveau :** intermédiaire · **Durée :** 2 séances d'environ 3 h (ou 1 journée) · **Équipe :** 4 étudiants · **Cloud :** AWS (compte partagé) · **Exécution :** HCP Terraform ([app.terraform.io](https://app.terraform.io))
@@ -62,36 +63,38 @@ Il n'y a pas encore de nom de domaine. Clients et testeurs utilisent l'**adresse
                  └────────────────────┴────────────── GitHub : terraform-small-project ────────────┘
 ```
 
+![Diagramme d'architecture AWS](img/aws-arch.jpeg)
+
 ### Matrice des environnements
 
-| Paramètre | DEV | PROD | Pourquoi ils diffèrent |
-|---|---|---|---|
-| Région | `ca-central-1` | `us-east-1` | Isolation. Montre aussi que les AMI, les AZ et les paires de clés sont **régionales** |
-| CIDR du VPC | `10.10.0.0/16` | `10.20.0.0/16` | Jamais de chevauchement, pour qu'un peering VPC reste possible plus tard |
-| `app_version` | `main` (branche) | `v1.0.0` (tag) | La PROD n'exécute que du code publié |
-| IP publique web | éphémère | **Elastic IP** | Pas de DNS : les clients ont besoin d'une adresse qui ne change pas |
-| SSH autorisé depuis | le `/32` de chaque membre | le `/32` du Release Manager seulement | Moindre privilège en PROD |
-| Workspace HCP | `kivubrew-dev` (auto-apply) | `kivubrew-prod` (confirmation manuelle) | États séparés : un `apply` raté en DEV ne peut jamais toucher la PROD |
-| `ssh_public_key` | clé DEV (toute l'équipe) | clé PROD (Release Manager) | Définie comme **variable de workspace**, jamais dans Git |
+| Paramètre           | DEV                         | PROD                                    | Pourquoi ils diffèrent                                                                |
+| ------------------- | --------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------- |
+| Région              | `ca-central-1`              | `us-east-1`                             | Isolation. Montre aussi que les AMI, les AZ et les paires de clés sont **régionales** |
+| CIDR du VPC         | `10.10.0.0/16`              | `10.20.0.0/16`                          | Jamais de chevauchement, pour qu'un peering VPC reste possible plus tard              |
+| `app_version`       | `main` (branche)            | `v1.0.0` (tag)                          | La PROD n'exécute que du code publié                                                  |
+| IP publique web     | éphémère                    | **Elastic IP**                          | Pas de DNS : les clients ont besoin d'une adresse qui ne change pas                   |
+| SSH autorisé depuis | le `/32` de chaque membre   | le `/32` du Release Manager seulement   | Moindre privilège en PROD                                                             |
+| Workspace HCP       | `kivubrew-dev` (auto-apply) | `kivubrew-prod` (confirmation manuelle) | États séparés : un `apply` raté en DEV ne peut jamais toucher la PROD                 |
+| `ssh_public_key`    | clé DEV (toute l'équipe)    | clé PROD (Release Manager)              | Définie comme **variable de workspace**, jamais dans Git                              |
 
 ### Règles des groupes de sécurité (le cœur du modèle bastion)
 
-| Groupe de sécurité | Entrant | Source |
-|---|---|---|
-| `bastion-sg` | 22/tcp | IP de l'équipe (`x.x.x.x/32`). **`0.0.0.0/0` est rejeté par une validation de variable** |
-| `web-sg` | 80/tcp | `0.0.0.0/0` (c'est un site public) |
-| `web-sg` | 22/tcp | **`bastion-sg` seulement** (référence à un groupe de sécurité, pas de CIDR) |
+| Groupe de sécurité | Entrant | Source                                                                                   |
+| ------------------ | ------- | ---------------------------------------------------------------------------------------- |
+| `bastion-sg`       | 22/tcp  | IP de l'équipe (`x.x.x.x/32`). **`0.0.0.0/0` est rejeté par une validation de variable** |
+| `web-sg`           | 80/tcp  | `0.0.0.0/0` (c'est un site public)                                                       |
+| `web-sg`           | 22/tcp  | **`bastion-sg` seulement** (référence à un groupe de sécurité, pas de CIDR)              |
 
-> 💡 **Point de discussion :** le serveur web garde une IP publique, car sans répartiteur de charge c'est le seul moyen de servir le HTTP. Son port 22 reste de toute façon injoignable depuis Internet. *Que changerait l'ajout d'un ALB ?* (Réponse : le serveur web pourrait passer dans un sous-réseau privé avec une passerelle NAT, et le bastion deviendrait le seul point d'entrée SSH public.)
+> 💡 **Point de discussion :** le serveur web garde une IP publique, car sans répartiteur de charge c'est le seul moyen de servir le HTTP. Son port 22 reste de toute façon injoignable depuis Internet. _Que changerait l'ajout d'un ALB ?_ (Réponse : le serveur web pourrait passer dans un sous-réseau privé avec une passerelle NAT, et le bastion deviendrait le seul point d'entrée SSH public.)
 
 ---
 
 ## 4. Les deux dépôts
 
-| Dépôt | Responsable dans l'équipe | Contenu |
-|---|---|---|
-| `terraform-small-project` | Réseau + Calcul + Release Manager | Tout le code d'infrastructure (structure ci-dessous) |
-| `static-web-app` | Développeur·se applicatif | `site/index.html`, `styles.css`, `app.js`. **Doit être public** |
+| Dépôt                     | Responsable dans l'équipe         | Contenu                                                         |
+| ------------------------- | --------------------------------- | --------------------------------------------------------------- |
+| `terraform-small-project` | Réseau + Calcul + Release Manager | Tout le code d'infrastructure (structure ci-dessous)            |
+| `static-web-app`          | Développeur·se applicatif         | `site/index.html`, `styles.css`, `app.js`. **Doit être public** |
 
 **Comment ils sont reliés :** au premier démarrage, le `user_data` du serveur web exécute :
 
@@ -128,12 +131,12 @@ terraform-small-project/
 
 ## 5. Rôles dans l'équipe
 
-| Rôle | Responsable de (CODEOWNERS) | Missions principales |
-|---|---|---|
-| 🌐 **Responsable réseau** | `modules/network/`, `modules/bastion/` | VPC, sous-réseaux, routage, bastion, règles d'accès SSH |
-| 🖥️ **Responsable calcul** | `modules/app_service/`, `environments/dev/` | Serveur web, groupe de sécurité, user_data, déploiements DEV |
-| 🚀 **Release Manager** | `environments/prod/` | Organisation, workspaces et variables HCP. Approbations PROD. **Seule personne qui clique sur « Confirm & Apply » en PROD** |
-| 👩‍💻 **Développeur·se applicatif** | dépôt `static-web-app` | Modifications du site, tags de version, CHANGELOG |
+| Rôle                             | Responsable de (CODEOWNERS)                 | Missions principales                                                                                                        |
+| -------------------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| 🌐 **Responsable réseau**        | `modules/network/`, `modules/bastion/`      | VPC, sous-réseaux, routage, bastion, règles d'accès SSH                                                                     |
+| 🖥️ **Responsable calcul**        | `modules/app_service/`, `environments/dev/` | Serveur web, groupe de sécurité, user_data, déploiements DEV                                                                |
+| 🚀 **Release Manager**           | `environments/prod/`                        | Organisation, workspaces et variables HCP. Approbations PROD. **Seule personne qui clique sur « Confirm & Apply » en PROD** |
+| 👩‍💻 **Développeur·se applicatif** | dépôt `static-web-app`                      | Modifications du site, tags de version, CHANGELOG                                                                           |
 
 Vous pouvez faire tourner les rôles entre la séance 1 et la séance 2 pour que chacun touche à toutes les parties.
 
@@ -158,100 +161,100 @@ Vous pouvez faire tourner les rôles entre la séance 1 et la séance 2 pour que
 
 ## 7. Le lab, phase par phase
 
-### Phase 0 — Lancement et configuration de HCP Terraform (45 min) · *toute l'équipe, menée par le Release Manager*
+### Phase 0 — Lancement et configuration de HCP Terraform (45 min) · _toute l'équipe, menée par le Release Manager_
 
 **A. GitHub**
+
 1. Créez les deux dépôts dans votre organisation GitHub à partir des fichiers de départ. Rendez `static-web-app` **public**.
 2. Remplissez `.github/CODEOWNERS` avec les vrais identifiants GitHub. Activez la protection de branche sur `main`.
 
-**B. Organisation HCP Terraform** *(Release Manager)*
-3. Créez l'organisation **`kivubrew-teamXX`**, puis invitez les 3 coéquipiers.
-4. Reportez ce nom d'organisation dans les deux fichiers `environments/*/backend.tf`, qui contiennent un bloc `cloud {}` (ouvrez une PR).
+**B. Organisation HCP Terraform** _(Release Manager)_ 3. Créez l'organisation **`kivubrew-teamXX`**, puis invitez les 3 coéquipiers. 4. Reportez ce nom d'organisation dans les deux fichiers `environments/*/backend.tf`, qui contiennent un bloc `cloud {}` (ouvrez une PR).
 
-**C. Deux workspaces** *(Release Manager)*. Créez-les avec le **Version Control workflow** → GitHub → `terraform-small-project` :
+**C. Deux workspaces** _(Release Manager)_. Créez-les avec le **Version Control workflow** → GitHub → `terraform-small-project` :
 
-| Paramètre | `kivubrew-dev` | `kivubrew-prod` |
-|---|---|---|
-| Terraform Working Directory | `environments/dev` | `environments/prod` |
-| Automatic run triggering → *only trigger runs when files in specified paths change* | `environments/dev/**`, `modules/**` | `environments/prod/**`, `modules/**` |
-| Apply method (Settings → General) | **Auto apply** | **Manual apply** |
-| Version de Terraform | dernière 1.x (≥ 1.10) | identique à DEV |
+| Paramètre                                                                           | `kivubrew-dev`                      | `kivubrew-prod`                      |
+| ----------------------------------------------------------------------------------- | ----------------------------------- | ------------------------------------ |
+| Terraform Working Directory                                                         | `environments/dev`                  | `environments/prod`                  |
+| Automatic run triggering → _only trigger runs when files in specified paths change_ | `environments/dev/**`, `modules/**` | `environments/prod/**`, `modules/**` |
+| Apply method (Settings → General)                                                   | **Auto apply**                      | **Manual apply**                     |
+| Version de Terraform                                                                | dernière 1.x (≥ 1.10)               | identique à DEV                      |
 
-> *Pourquoi les deux workspaces surveillent-ils `modules/**` ? Que se passe-t-il en PROD quand quelqu'un fusionne une modification de module ?*
+> _Pourquoi les deux workspaces surveillent-ils `modules/**` ? Que se passe-t-il en PROD quand quelqu'un fusionne une modification de module ?_
 
-**D. Identifiants AWS, une seule fois pour les deux workspaces** *(Release Manager)*
-5. **Settings → Variable sets** de l'organisation → créez `aws-team-credentials`, appliqué aux deux workspaces :
+**D. Identifiants AWS, une seule fois pour les deux workspaces** _(Release Manager)_ 5. **Settings → Variable sets** de l'organisation → créez `aws-team-credentials`, appliqué aux deux workspaces :
 
-| Clé | Catégorie | Sensible |
-|---|---|---|
-| `AWS_ACCESS_KEY_ID` | Environment variable | ✅ |
-| `AWS_SECRET_ACCESS_KEY` | Environment variable | ✅ |
+| Clé                     | Catégorie            | Sensible |
+| ----------------------- | -------------------- | -------- |
+| `AWS_ACCESS_KEY_ID`     | Environment variable | ✅       |
+| `AWS_SECRET_ACCESS_KEY` | Environment variable | ✅       |
 
 Aucune région ici : le `terraform.tfvars` de chaque environnement définit son propre `aws_region`.
 
-**E. Clés SSH : passer la clé PUBLIQUE comme variable de workspace** 🔑
-6. Le Release Manager génère une paire de clés par environnement **sur son ordinateur** :
-   ```bash
-   ssh-keygen -t ed25519 -f ~/.ssh/kivubrew-dev  -C "kivubrew dev"
-   ssh-keygen -t ed25519 -f ~/.ssh/kivubrew-prod -C "kivubrew prod"
-   cat ~/.ssh/kivubrew-dev.pub     # une ligne : ssh-ed25519 AAAA... kivubrew dev
-   ```
+**E. Clés SSH : passer la clé PUBLIQUE comme variable de workspace** 🔑 6. Le Release Manager génère une paire de clés par environnement **sur son ordinateur** :
+
+```bash
+ssh-keygen -t ed25519 -f ~/.ssh/kivubrew-dev  -C "kivubrew dev"
+ssh-keygen -t ed25519 -f ~/.ssh/kivubrew-prod -C "kivubrew prod"
+cat ~/.ssh/kivubrew-dev.pub     # une ligne : ssh-ed25519 AAAA... kivubrew dev
+```
+
 7. Dans **chaque** workspace, allez dans **Variables → Add variable** et ajoutez :
 
-| Workspace | Clé | Catégorie | Valeur | Sensible |
-|---|---|---|---|---|
-| `kivubrew-dev` | `ssh_public_key` | **Terraform variable** | la ligne complète de `kivubrew-dev.pub` | ❌ (elle est publique) |
-| `kivubrew-prod` | `ssh_public_key` | **Terraform variable** | la ligne complète de `kivubrew-prod.pub` | ❌ |
+| Workspace       | Clé              | Catégorie              | Valeur                                   | Sensible               |
+| --------------- | ---------------- | ---------------------- | ---------------------------------------- | ---------------------- |
+| `kivubrew-dev`  | `ssh_public_key` | **Terraform variable** | la ligne complète de `kivubrew-dev.pub`  | ❌ (elle est publique) |
+| `kivubrew-prod` | `ssh_public_key` | **Terraform variable** | la ligne complète de `kivubrew-prod.pub` | ❌                     |
 
 8. Partagez la **clé privée DEV** (`~/.ssh/kivubrew-dev`, sans `.pub`) avec les coéquipiers par un canal sécurisé (ni Git, ni le chat), puis exécutez `chmod 600 ~/.ssh/kivubrew-dev` sur chaque ordinateur. La clé privée PROD **reste chez le Release Manager**.
 
-> 💡 **Pourquoi une variable et pas `file("~/.ssh/...")` ?** HCP Terraform s'exécute sur les serveurs de HashiCorp, pas sur votre ordinateur, donc `~/.ssh` n'y existe pas. Seule la moitié **publique** quitte votre machine. La variable a une validation qui rejette tout ce qui ne ressemble pas à une ligne de clé publique : coller une clé privée par erreur fait échouer le plan. *Essayez avec une valeur bidon et collez l'erreur dans ANSWERS.md.*
+> 💡 **Pourquoi une variable et pas `file("~/.ssh/...")` ?** HCP Terraform s'exécute sur les serveurs de HashiCorp, pas sur votre ordinateur, donc `~/.ssh` n'y existe pas. Seule la moitié **publique** quitte votre machine. La variable a une validation qui rejette tout ce qui ne ressemble pas à une ligne de clé publique : coller une clé privée par erreur fait échouer le plan. _Essayez avec une valeur bidon et collez l'erreur dans ANSWERS.md._
 
-**F. Première exécution**
-9. Mettez à jour les deux `terraform.tfvars` (`team`, `allowed_ssh_cidrs`, `app_repo_url`) et fusionnez.
-10. Un workspace VCS tout neuf **ne démarre pas tout seul** : dans chaque workspace, cliquez une fois sur **New run → Plan and apply**.
+**F. Première exécution** 9. Mettez à jour les deux `terraform.tfvars` (`team`, `allowed_ssh_cidrs`, `app_repo_url`) et fusionnez. 10. Un workspace VCS tout neuf **ne démarre pas tout seul** : dans chaque workspace, cliquez une fois sur **New run → Plan and apply**.
 
 ✅ **Point de contrôle 0 :** les deux workspaces affichent une première exécution réussie (DEV : `Plan: 7 to add` une fois la phase 1 fusionnée, ou un plan vide avant). Sur un ordinateur, `terraform login`, `cd environments/dev`, `terraform init` puis `terraform plan` lancent un plan spéculatif **à distance**.
 
 ---
 
-### Phase 1 — Module réseau (45 min) · *Responsable réseau (les autres relisent)*
+### Phase 1 — Module réseau (45 min) · _Responsable réseau (les autres relisent)_
 
 Implémentez `modules/network` : VPC, Internet Gateway, un sous-réseau public par CIDR réparti sur les AZ, une table de routage et ses associations.
 
 Exigences :
+
 - Les AZ viennent de `data "aws_availability_zones"`. **Pas de `ca-central-1a` codé en dur**, sinon le module casse en PROD.
 - Sorties obligatoires : `vpc_id`, `vpc_cidr`, `public_subnet_ids`.
 
 Ouvrez la PR. HCP Terraform publie un **plan spéculatif** pour les deux workspaces comme vérifications de PR (seul le module réseau est branché à ce stade).
 
-✅ **Point de contrôle 1 :** le plan DEV affiche **`Plan: 7 to add`**. *Listez les 7 ressources et expliquez d'où vient chacune.* Fusionnez : DEV s'**applique automatiquement**. La PROD planifie et **attend une confirmation**. Le Release Manager confirme quand l'équipe est prête.
+✅ **Point de contrôle 1 :** le plan DEV affiche **`Plan: 7 to add`**. _Listez les 7 ressources et expliquez d'où vient chacune._ Fusionnez : DEV s'**applique automatiquement**. La PROD planifie et **attend une confirmation**. Le Release Manager confirme quand l'équipe est prête.
 
 ---
 
-### Phase 2 — Module bastion (45 min) · *Responsable réseau + Développeur·se en binôme*
+### Phase 2 — Module bastion (45 min) · _Responsable réseau + Développeur·se en binôme_
 
 Pendant que le responsable réseau construit le bastion, le **développeur·se applicatif** personnalise le site (nom, menu, couleurs) et ouvre une PR dans `static-web-app`.
 
 Implémentez `modules/bastion` : paire de clés, groupe de sécurité, règle SSH entrante **par IP de l'équipe** (`for_each`), règle sortante et une instance AL2023.
 
 Exigences :
-- L'AMI vient du paramètre SSM public `/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64`. *Pourquoi est-ce important quand DEV et PROD sont dans des régions différentes ?*
+
+- L'AMI vient du paramètre SSM public `/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64`. _Pourquoi est-ce important quand DEV et PROD sont dans des régions différentes ?_
 - `variables.tf` **rejette `0.0.0.0/0`**. Essayez, constatez l'échec du plan et collez l'erreur dans votre PR.
 - Branchez `module "bastion"` dans les **deux** `main.tf` d'environnement (ils restent identiques !).
 
-✅ **Point de contrôle 2 :** `ssh -i ~/.ssh/kivubrew-dev ec2-user@<bastion_public_ip>` fonctionne depuis l'ordinateur de chaque membre. Une personne hors de l'équipe obtient un **timeout**, pas un « permission denied ». *Pourquoi un timeout ?*
+✅ **Point de contrôle 2 :** `ssh -i ~/.ssh/kivubrew-dev ec2-user@<bastion_public_ip>` fonctionne depuis l'ordinateur de chaque membre. Une personne hors de l'équipe obtient un **timeout**, pas un « permission denied ». _Pourquoi un timeout ?_
 
 ---
 
-### Phase 3 — Module app_service et premier déploiement DEV (60 min) · *Responsable calcul*
+### Phase 3 — Module app_service et premier déploiement DEV (60 min) · _Responsable calcul_
 
 Implémentez `modules/app_service` : groupe de sécurité web (HTTP pour tous, **SSH depuis le SG du bastion uniquement**), l'instance EC2 avec un `user_data` généré depuis `templates/user_data.sh.tftpl`, une Elastic IP optionnelle et les sorties.
 
 Exigences :
+
 - La règle SSH utilise `referenced_security_group_id = var.bastion_security_group_id`. **Pas de CIDR.**
 - `user_data_replace_on_change = true`. Expliquez dans la PR ce que cela fait et pourquoi on le veut.
-- `lifecycle { ignore_changes = [ami] }`. *Que se passerait-il en PROD sans cela, à chaque nouvelle AMI publiée par AWS ?*
+- `lifecycle { ignore_changes = [ami] }`. _Que se passerait-il en PROD sans cela, à chaque nouvelle AMI publiée par AWS ?_
 - Branchez `module "app_service"` et les sorties (`app_url`, `ssh_command`, …) dans les deux environnements.
 
 Déployez en DEV : lisez le plan spéculatif de la PR, faites approuver, puis fusionnez. Suivez l'exécution dans **`kivubrew-dev` → Runs**. À la fin, lisez les sorties dans l'onglet **Outputs** du workspace, ou depuis un ordinateur :
@@ -270,12 +273,13 @@ curl -s localhost/env.json
 ```
 
 ✅ **Point de contrôle 3 :**
+
 - `http://<ip-publique-dev>` affiche le site avec une bannière **verte `DEV · ca-central-1 · main`**
 - Le SSH vers le serveur web fonctionne **uniquement** avec `-J` (le SSH direct vers l'IP web aboutit à un timeout)
 
 ---
 
-### Phase 4 — Le cycle de modification en DEV (30 min) · *Développeur·se → Responsable calcul*
+### Phase 4 — Le cycle de modification en DEV (30 min) · _Développeur·se → Responsable calcul_
 
 1. Le développeur·se fusionne un changement visible sur `main` dans `static-web-app` (par exemple un nouvel article au menu).
 2. Rafraîchissez le site DEV. **Le changement n'apparaît pas.** Discutez-en : le `user_data` ne s'exécute qu'au premier démarrage, et `app_version = "main"` n'a pas changé, donc Terraform ne voit aucune différence.
@@ -286,7 +290,7 @@ curl -s localhost/env.json
 
 ---
 
-### Phase 5 — Première mise en production (45 min) · *Développeur·se → Release Manager*
+### Phase 5 — Première mise en production (45 min) · _Développeur·se → Release Manager_
 
 1. Le développeur·se met à jour `CHANGELOG.md` et tague la version :
    ```bash
@@ -304,24 +308,24 @@ curl -s localhost/env.json
 
 ---
 
-### Phase 6 — Cartes chaos 😈 (45 min) · *le formateur en choisit 2 ou 3*
+### Phase 6 — Cartes chaos 😈 (45 min) · _le formateur en choisit 2 ou 3_
 
 Le formateur remet une carte à la fois à chaque équipe. L'équipe doit **détecter, expliquer et corriger le problème uniquement avec Terraform et Git**.
 
-| Carte | Ce que fait le formateur | Ce que l'équipe doit faire |
-|---|---|---|
-| 🃏 **A — Dérive** | Ajoute `22/tcp depuis 0.0.0.0/0` au `web-sg` DEV dans la console | La détecter avec une nouvelle exécution **Plan only**, expliquer la sortie, la supprimer avec **Plan and apply**. Bonus : essayer le mode **Refresh state** |
-| 🃏 **B — File d'attente** | Demande à deux membres de fusionner des PR DEV, et de lancer une exécution manuelle, dans la même minute | Trouver les exécutions **en file d'attente** dans le workspace. Expliquer pourquoi HCP les met en file et pourquoi le verrou par workspace évite tout conflit. Discuter de l'utilité du bouton manuel **Lock** d'un workspace |
-| 🃏 **C — Mauvaise version** | Demande au développeur·se de taguer une `v1.1.0` cassée, que l'équipe déploie en PROD | Revenir en arrière avec une **PR de revert** vers `v1.0.0`. Constater que **l'IP PROD n'a pas changé** (merci l'EIP). Ne jamais supprimer ni déplacer le tag |
-| 🃏 **D — IP compromise** | « L'IP d'un membre a changé » ou « un stagiaire a quitté l'équipe » | Mettre à jour `allowed_ssh_cidrs` par une PR. Constater que seule une **règle** de SG change ; le bastion n'est **pas** remplacé |
-| 🃏 **E — Montée en charge PROD** | « Black Friday : la PROD a besoin d'un `t3.small` » | Le modifier **uniquement** dans `prod/terraform.tfvars`. Lire le plan : l'instance est-elle modifiée **sur place** ou remplacée ? L'EIP survit-elle ? |
-| 🃏 **F — Piège du copier-coller** | Change `vpc_cidr` dans `prod/terraform.tfvars` en `10.10.0.0/16` | Le repérer en revue de PR *avant* l'apply. Expliquer pourquoi des CIDR qui se chevauchent empêchent un futur peering |
+| Carte                             | Ce que fait le formateur                                                                                 | Ce que l'équipe doit faire                                                                                                                                                                                                    |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 🃏 **A — Dérive**                 | Ajoute `22/tcp depuis 0.0.0.0/0` au `web-sg` DEV dans la console                                         | La détecter avec une nouvelle exécution **Plan only**, expliquer la sortie, la supprimer avec **Plan and apply**. Bonus : essayer le mode **Refresh state**                                                                   |
+| 🃏 **B — File d'attente**         | Demande à deux membres de fusionner des PR DEV, et de lancer une exécution manuelle, dans la même minute | Trouver les exécutions **en file d'attente** dans le workspace. Expliquer pourquoi HCP les met en file et pourquoi le verrou par workspace évite tout conflit. Discuter de l'utilité du bouton manuel **Lock** d'un workspace |
+| 🃏 **C — Mauvaise version**       | Demande au développeur·se de taguer une `v1.1.0` cassée, que l'équipe déploie en PROD                    | Revenir en arrière avec une **PR de revert** vers `v1.0.0`. Constater que **l'IP PROD n'a pas changé** (merci l'EIP). Ne jamais supprimer ni déplacer le tag                                                                  |
+| 🃏 **D — IP compromise**          | « L'IP d'un membre a changé » ou « un stagiaire a quitté l'équipe »                                      | Mettre à jour `allowed_ssh_cidrs` par une PR. Constater que seule une **règle** de SG change ; le bastion n'est **pas** remplacé                                                                                              |
+| 🃏 **E — Montée en charge PROD**  | « Black Friday : la PROD a besoin d'un `t3.small` »                                                      | Le modifier **uniquement** dans `prod/terraform.tfvars`. Lire le plan : l'instance est-elle modifiée **sur place** ou remplacée ? L'EIP survit-elle ?                                                                         |
+| 🃏 **F — Piège du copier-coller** | Change `vpc_cidr` dans `prod/terraform.tfvars` en `10.10.0.0/16`                                         | Le repérer en revue de PR _avant_ l'apply. Expliquer pourquoi des CIDR qui se chevauchent empêchent un futur peering                                                                                                          |
 
 ✅ **Point de contrôle 6 :** chaque carte est résolue par une PR avec son plan et une courte explication dans la description.
 
 ---
 
-### Phase 7 — Démantèlement (15 min) · *Release Manager*
+### Phase 7 — Démantèlement (15 min) · _Release Manager_
 
 Dans chaque workspace, PROD d'abord : **Settings → Destruction and Deletion → Queue destroy plan**. Lisez le plan (tout doit être en `destroy`), puis **Confirm & Apply**. Gardez les workspaces : leur historique d'état fait partie de la note.
 
@@ -333,34 +337,36 @@ Dans chaque workspace, PROD d'abord : **Settings → Destruction and Deletion �
 
 1. Les deux dépôts, avec un **historique de PR propre** : au moins une PR par phase, chacune avec un plan et une approbation
 2. Captures d'écran : le site DEV (bannière verte) et le site PROD (bannière rouge), côte à côte
-3. Un court `ANSWERS.md` dans le dépôt d'infrastructure qui répond aux *questions en italique* de ce guide
+3. Un court `ANSWERS.md` dans le dépôt d'infrastructure qui répond aux _questions en italique_ de ce guide
 4. Une capture d'une session `ssh -J` réussie, et d'une tentative de SSH direct vers le serveur web qui échoue
 
 ---
 
 ## 9. Grille d'évaluation (100 pts)
 
-| Critère | Pts |
-|---|---|
-| Les modules fonctionnent et respectent leurs contrats d'entrées/sorties | 20 |
-| `dev/main.tf` et `prod/main.tf` identiques ; toutes les différences sont dans les tfvars | 10 |
-| Workspaces HCP correctement configurés : répertoire de travail, chemins de déclenchement, variables, apply manuel en PROD | 10 |
-| Modèle bastion correct : SSH uniquement depuis les IP de l'équipe, SSH web uniquement depuis le SG du bastion | 15 |
-| Application déployée depuis le dépôt séparé ; DEV sur `main`, PROD sur un tag | 15 |
-| Collaboration Git : PR, CODEOWNERS respectés, plans collés, revues pertinentes | 15 |
-| Cartes chaos résolues correctement et expliquées | 10 |
-| Démantèlement propre, aucune ressource oubliée | 5 |
+| Critère                                                                                                                   | Pts |
+| ------------------------------------------------------------------------------------------------------------------------- | --- |
+| Les modules fonctionnent et respectent leurs contrats d'entrées/sorties                                                   | 20  |
+| `dev/main.tf` et `prod/main.tf` identiques ; toutes les différences sont dans les tfvars                                  | 10  |
+| Workspaces HCP correctement configurés : répertoire de travail, chemins de déclenchement, variables, apply manuel en PROD | 10  |
+| Modèle bastion correct : SSH uniquement depuis les IP de l'équipe, SSH web uniquement depuis le SG du bastion             | 15  |
+| Application déployée depuis le dépôt séparé ; DEV sur `main`, PROD sur un tag                                             | 15  |
+| Collaboration Git : PR, CODEOWNERS respectés, plans collés, revues pertinentes                                            | 15  |
+| Cartes chaos résolues correctement et expliquées                                                                          | 10  |
+| Démantèlement propre, aucune ressource oubliée                                                                            | 5   |
 
 ---
 
 ## 10. Notes pour le formateur
 
 **Avant le lab : AWS**
+
 - Un seul compte partagé : donnez à chaque équipe un utilisateur IAM (dont la clé d'accès va dans le variable set HCP de l'équipe). Limitez-le à `ca-central-1` et `us-east-1` avec une SCP ou une condition IAM (`aws:RequestedRegion`).
 - Tous les noms portent `kivubrew-teamXX-<env>` et utilisent `name_prefix`, donc 6 équipes peuvent partager le compte sans collision. Attention au quota par défaut de **5 Elastic IP par région** (une par équipe en `us-east-1`).
 - Coût : avec 4 × `t3.micro` par équipe et 1 EIP, un lab de 2 jours coûte quelques dollars par équipe, à condition d'imposer le démantèlement.
 
 **Avant le lab : HCP Terraform**
+
 - Utilisez **une organisation gratuite par équipe** (`kivubrew-team01`, `kivubrew-team02`, …). Le plan Free n'autorise **qu'une exécution simultanée par organisation** : une organisation partagée ferait passer les exécutions de toutes les équipes dans une seule file. Une équipe utilise environ 40 ressources gérées (deux environnements), bien en dessous des 500 du plan Free.
 - Demandez à chaque Release Manager de vous ajouter à son organisation pour suivre les exécutions et noter l'historique.
 - La connexion GitHub se fait par organisation, à la création du premier workspace VCS. Les étudiants doivent être administrateurs de leur dépôt pour autoriser la GitHub App de HashiCorp.
@@ -368,20 +374,20 @@ Dans chaque workspace, PROD d'abord : **Settings → Destruction and Deletion �
 
 **Pièges fréquents (et ce qu'ils enseignent)**
 
-| Symptôme | Cause | Leçon |
-|---|---|---|
-| Le site ne charge pas juste après l'apply | `user_data` encore en cours (1–2 min) | `instance running` ≠ `application prête` |
-| Le site en `https://` échoue | Seul le port 80 est ouvert, pas de certificat | Utiliser `http://`. ALB + ACM est une suite logique |
-| `git clone` échoue dans le log user-data | Dépôt applicatif privé, ou mauvais nom de tag | Un clone HTTPS anonyme exige un dépôt public |
-| SSH : `Permission denied (publickey)` | Mauvaise clé pour l'environnement, ou `ubuntu@` utilisé | L'utilisateur AL2023 est `ec2-user`. Les clés sont par environnement |
-| SSH : timeout | IP absente de `allowed_ssh_cidrs` (IP de la maison changée) | Un SG ignore le paquet en silence : timeout, pas de refus |
-| `InvalidKeyPair.NotFound` en PROD | Paire de clés créée dans la région DEV | Paires de clés, AMI et SG sont **régionaux** |
-| `Invalid value for "path" parameter: no file exists at "~/.ssh/..."` | Quelqu'un a remis `file("~/.ssh/...")` dans le code | Les exécutions à distance ne voient pas votre ordinateur : utilisez la variable de workspace `ssh_public_key` |
-| `No valid credential sources found` | Variable set non appliqué à ce workspace | Les variable sets s'attachent par workspace (ou globalement) |
-| Une fusion dans `main` ne lance rien | Workspace tout neuf jamais exécuté, ou changement hors des chemins de déclenchement | La première exécution se lance à la main. Vérifiez *Automatic run triggering* |
-| `Apply not allowed for workspaces with a VCS connection` | `terraform apply` lancé depuis un ordinateur | En workflow VCS, les applies viennent des fusions ou de l'interface |
-| Le bloc `cloud` refuse les variables | `var.` utilisé dans `backend.tf` | Le bloc `cloud {}` est lu avant que les variables existent |
-| Le plan veut remplacer le serveur web sans raison apparente | `user_data` modifié (même un espace) | C'est `user_data_replace_on_change`, voulu par conception |
+| Symptôme                                                             | Cause                                                                               | Leçon                                                                                                         |
+| -------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Le site ne charge pas juste après l'apply                            | `user_data` encore en cours (1–2 min)                                               | `instance running` ≠ `application prête`                                                                      |
+| Le site en `https://` échoue                                         | Seul le port 80 est ouvert, pas de certificat                                       | Utiliser `http://`. ALB + ACM est une suite logique                                                           |
+| `git clone` échoue dans le log user-data                             | Dépôt applicatif privé, ou mauvais nom de tag                                       | Un clone HTTPS anonyme exige un dépôt public                                                                  |
+| SSH : `Permission denied (publickey)`                                | Mauvaise clé pour l'environnement, ou `ubuntu@` utilisé                             | L'utilisateur AL2023 est `ec2-user`. Les clés sont par environnement                                          |
+| SSH : timeout                                                        | IP absente de `allowed_ssh_cidrs` (IP de la maison changée)                         | Un SG ignore le paquet en silence : timeout, pas de refus                                                     |
+| `InvalidKeyPair.NotFound` en PROD                                    | Paire de clés créée dans la région DEV                                              | Paires de clés, AMI et SG sont **régionaux**                                                                  |
+| `Invalid value for "path" parameter: no file exists at "~/.ssh/..."` | Quelqu'un a remis `file("~/.ssh/...")` dans le code                                 | Les exécutions à distance ne voient pas votre ordinateur : utilisez la variable de workspace `ssh_public_key` |
+| `No valid credential sources found`                                  | Variable set non appliqué à ce workspace                                            | Les variable sets s'attachent par workspace (ou globalement)                                                  |
+| Une fusion dans `main` ne lance rien                                 | Workspace tout neuf jamais exécuté, ou changement hors des chemins de déclenchement | La première exécution se lance à la main. Vérifiez _Automatic run triggering_                                 |
+| `Apply not allowed for workspaces with a VCS connection`             | `terraform apply` lancé depuis un ordinateur                                        | En workflow VCS, les applies viennent des fusions ou de l'interface                                           |
+| Le bloc `cloud` refuse les variables                                 | `var.` utilisé dans `backend.tf`                                                    | Le bloc `cloud {}` est lu avant que les variables existent                                                    |
+| Le plan veut remplacer le serveur web sans raison apparente          | `user_data` modifié (même un espace)                                                | C'est `user_data_replace_on_change`, voulu par conception                                                     |
 
 ---
 
