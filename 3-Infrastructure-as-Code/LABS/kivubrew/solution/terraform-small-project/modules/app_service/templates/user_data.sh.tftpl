@@ -1,0 +1,22 @@
+#!/bin/bash
+# Rendered by Terraform templatefile(): the dollar-brace placeholders below are filled in by Terraform.
+set -euxo pipefail
+exec > >(tee /var/log/user-data.log) 2>&1
+
+dnf install -y nginx git
+
+rm -rf /tmp/app /usr/share/nginx/html/*
+git clone --depth 1 --branch "${app_version}" "${app_repo_url}" /tmp/app
+cp -r "/tmp/app/${app_source_dir}/." /usr/share/nginx/html/
+
+# Environment metadata the app reads to display its banner
+cat > /usr/share/nginx/html/env.json <<JSON
+{
+  "environment": "${environment}",
+  "region": "${aws_region}",
+  "app_version": "${app_version}",
+  "deployed_by": "terraform"
+}
+JSON
+
+systemctl enable --now nginx
