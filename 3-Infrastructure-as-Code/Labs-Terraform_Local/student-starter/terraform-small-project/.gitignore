@@ -1,0 +1,24 @@
+# Local .terraform directories
+**/.terraform/*
+
+# State files — state lives in S3, never in git
+*.tfstate
+*.tfstate.*
+
+# Plan files and crash logs
+*.tfplan
+tfplan
+crash.log
+crash.*.log
+
+# Override files (personal local tweaks)
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# CLI config
+.terraformrc
+terraform.rc
+
+# NOTE: .terraform.lock.hcl IS committed on purpose (pins provider versions for the whole team)

@@ -1,0 +1,9 @@
+# Replace the @handles with your team members' GitHub usernames.
+# A PR touching these paths needs approval from the listed owner(s).
+
+/modules/network/      @network-owner
+/modules/bastion/      @network-owner
+/modules/app_service/  @compute-owner
+/environments/dev/     @compute-owner @release-manager
+/environments/prod/    @release-manager
+/bootstrap/            @release-manager

@@ -1,0 +1,31 @@
+# Static checks only: no AWS credentials needed, no plan/apply in CI.
+name: terraform-ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        env: [dev, prod]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.10"
+
+      - name: Format check
+        run: terraform fmt -check -recursive
+
+      - name: Init (no backend)
+        working-directory: environments/${{ matrix.env }}
+        run: terraform init -backend=false -input=false
+
+      - name: Validate
+        working-directory: environments/${{ matrix.env }}
+        run: terraform validate
