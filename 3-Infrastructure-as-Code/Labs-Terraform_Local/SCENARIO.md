@@ -1,4 +1,5 @@
 # 🏗️ Terraform Team Lab — "KivuBrew Goes Live"
+
 ### Two environments, one codebase: deploying a static web app on EC2 behind a bastion host
 
 > **Level:** Intermediate · **Duration:** 2 sessions of about 3 h (or 1 day) · **Team size:** 4 students · **Cloud:** AWS (shared account)
@@ -58,35 +59,37 @@ By the end of this lab you will be able to:
                  └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
+![AWS Architecture Diagram](../Labs-Terraform_Cloud/kivubrew/img/aws-arch.jpeg)
+
 ### Environment matrix
 
-| Setting | DEV | PROD | Why they differ |
-|---|---|---|---|
-| Region | `ca-central-1` | `us-east-1` | Isolation; also shows that AMIs, AZs and key pairs are **regional** |
-| VPC CIDR | `10.10.0.0/16` | `10.20.0.0/16` | Never overlap, so VPC peering stays possible later |
-| `app_version` | `main` (branch) | `v1.0.0` (tag) | PROD only runs released code |
-| Web public IP | ephemeral | **Elastic IP** | No DNS: customers need an address that doesn't change |
-| SSH allowed from | every team member's `/32` | Release Manager's `/32` only | Least privilege in PROD |
-| State file | `teamXX/dev/...` | `teamXX/prod/...` | A broken DEV apply can never touch PROD |
+| Setting          | DEV                       | PROD                         | Why they differ                                                     |
+| ---------------- | ------------------------- | ---------------------------- | ------------------------------------------------------------------- |
+| Region           | `ca-central-1`            | `us-east-1`                  | Isolation; also shows that AMIs, AZs and key pairs are **regional** |
+| VPC CIDR         | `10.10.0.0/16`            | `10.20.0.0/16`               | Never overlap, so VPC peering stays possible later                  |
+| `app_version`    | `main` (branch)           | `v1.0.0` (tag)               | PROD only runs released code                                        |
+| Web public IP    | ephemeral                 | **Elastic IP**               | No DNS: customers need an address that doesn't change               |
+| SSH allowed from | every team member's `/32` | Release Manager's `/32` only | Least privilege in PROD                                             |
+| State file       | `teamXX/dev/...`          | `teamXX/prod/...`            | A broken DEV apply can never touch PROD                             |
 
 ### Security group rules (the heart of the bastion pattern)
 
-| Security group | Inbound | Source |
-|---|---|---|
-| `bastion-sg` | 22/tcp | team IPs (`x.x.x.x/32`). **`0.0.0.0/0` is rejected by a variable validation** |
-| `web-sg` | 80/tcp | `0.0.0.0/0` (it's a public website) |
-| `web-sg` | 22/tcp | **`bastion-sg` only** (security group reference, no CIDR) |
+| Security group | Inbound | Source                                                                        |
+| -------------- | ------- | ----------------------------------------------------------------------------- |
+| `bastion-sg`   | 22/tcp  | team IPs (`x.x.x.x/32`). **`0.0.0.0/0` is rejected by a variable validation** |
+| `web-sg`       | 80/tcp  | `0.0.0.0/0` (it's a public website)                                           |
+| `web-sg`       | 22/tcp  | **`bastion-sg` only** (security group reference, no CIDR)                     |
 
-> 💡 **Discussion point:** the web server still has a public IP, because without a load balancer that is the only way to serve HTTP. Port 22 on it is unreachable from the internet anyway. *What would change if we added an ALB?* (Answer: the web server could move to a private subnet with a NAT gateway, and the bastion would become the only public SSH entry point.)
+> 💡 **Discussion point:** the web server still has a public IP, because without a load balancer that is the only way to serve HTTP. Port 22 on it is unreachable from the internet anyway. _What would change if we added an ALB?_ (Answer: the web server could move to a private subnet with a NAT gateway, and the bastion would become the only public SSH entry point.)
 
 ---
 
 ## 4. The two repositories
 
-| Repo | Owner on the team | Content |
-|---|---|---|
-| `terraform-small-project` | Network + Compute + Release Manager | All infrastructure code (structure below) |
-| `static-web-app` | App Developer | `site/index.html`, `styles.css`, `app.js`. **Must be public** |
+| Repo                      | Owner on the team                   | Content                                                       |
+| ------------------------- | ----------------------------------- | ------------------------------------------------------------- |
+| `terraform-small-project` | Network + Compute + Release Manager | All infrastructure code (structure below)                     |
+| `static-web-app`          | App Developer                       | `site/index.html`, `styles.css`, `app.js`. **Must be public** |
 
 **How they connect:** at first boot, the web server's `user_data` runs:
 
@@ -124,12 +127,12 @@ terraform-small-project/
 
 ## 5. Team roles
 
-| Role | Owns (CODEOWNERS) | Main responsibilities |
-|---|---|---|
-| 🌐 **Network owner** | `modules/network/`, `modules/bastion/` | VPC, subnets, routing, bastion, SSH access rules |
-| 🖥️ **Compute owner** | `modules/app_service/`, `environments/dev/` | Web server, security group, user_data, DEV deployments |
-| 🚀 **Release Manager** | `environments/prod/`, `bootstrap/` | State backend, PROD approvals, **only person who applies PROD** |
-| 👩‍💻 **App Developer** | `static-web-app` repo | Website changes, release tags, CHANGELOG |
+| Role                   | Owns (CODEOWNERS)                           | Main responsibilities                                           |
+| ---------------------- | ------------------------------------------- | --------------------------------------------------------------- |
+| 🌐 **Network owner**   | `modules/network/`, `modules/bastion/`      | VPC, subnets, routing, bastion, SSH access rules                |
+| 🖥️ **Compute owner**   | `modules/app_service/`, `environments/dev/` | Web server, security group, user_data, DEV deployments          |
+| 🚀 **Release Manager** | `environments/prod/`, `bootstrap/`          | State backend, PROD approvals, **only person who applies PROD** |
+| 👩‍💻 **App Developer**   | `static-web-app` repo                       | Website changes, release tags, CHANGELOG                        |
 
 Rotate roles between sessions 1 and 2 if you want everyone to touch every part.
 
@@ -154,7 +157,7 @@ Rotate roles between sessions 1 and 2 if you want everyone to touch every part.
 
 ## 7. The lab, phase by phase
 
-### Phase 0 — Kick-off and plumbing (30 min) · *all, led by Release Manager*
+### Phase 0 — Kick-off and plumbing (30 min) · _all, led by Release Manager_
 
 1. Create the two repos in your GitHub org from the starter files. Make `static-web-app` **public**.
 2. Fill in `.github/CODEOWNERS` with real GitHub handles. Turn on branch protection on `main`.
@@ -175,43 +178,46 @@ Rotate roles between sessions 1 and 2 if you want everyone to touch every part.
 
 ---
 
-### Phase 1 — Network module (45 min) · *Network owner (others review)*
+### Phase 1 — Network module (45 min) · _Network owner (others review)_
 
 Implement `modules/network`: VPC, Internet Gateway, one public subnet per CIDR across AZs, a route table, and associations.
 
 Requirements:
+
 - AZs come from `data "aws_availability_zones"`. **No hard-coded `ca-central-1a`**, or the module breaks in PROD.
 - Required outputs: `vpc_id`, `vpc_cidr`, `public_subnet_ids`.
 
 Open the PR **with the DEV plan** (only the network module is wired at this point).
 
-✅ **Checkpoint 1:** the DEV plan shows **`Plan: 7 to add`**. *List the 7 resources and explain where each one comes from.*. Apply DEV.
+✅ **Checkpoint 1:** the DEV plan shows **`Plan: 7 to add`**. _List the 7 resources and explain where each one comes from._. Apply DEV.
 
 ---
 
-### Phase 2 — Bastion module (45 min) · *Network owner + App Developer pair-programming*
+### Phase 2 — Bastion module (45 min) · _Network owner + App Developer pair-programming_
 
 While the Network owner builds the bastion, the **App Developer** customises the website (company name, menu, colours) and opens a PR in `static-web-app`.
 
 Implement `modules/bastion`: key pair, security group, SSH ingress **per team IP** (`for_each`), egress, and an AL2023 instance.
 
 Requirements:
-- AMI comes from the public SSM parameter `/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64`. *Why does this matter when DEV and PROD are in different regions?*
+
+- AMI comes from the public SSM parameter `/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64`. _Why does this matter when DEV and PROD are in different regions?_
 - `variables.tf` **rejects `0.0.0.0/0`**. Try it, watch the plan fail, and paste the error in your PR.
 - Wire `module "bastion"` in **both** environment `main.tf` files (they stay identical!).
 
-✅ **Checkpoint 2:** `ssh -i ~/.ssh/kivubrew-dev ec2-user@<bastion_public_ip>` works from every team member's laptop. A friend outside the team gets a **timeout**, not "permission denied". *Why a timeout?*
+✅ **Checkpoint 2:** `ssh -i ~/.ssh/kivubrew-dev ec2-user@<bastion_public_ip>` works from every team member's laptop. A friend outside the team gets a **timeout**, not "permission denied". _Why a timeout?_
 
 ---
 
-### Phase 3 — App service module and first DEV deploy (60 min) · *Compute owner*
+### Phase 3 — App service module and first DEV deploy (60 min) · _Compute owner_
 
 Implement `modules/app_service`: web security group (HTTP from everyone, **SSH from the bastion SG only**), the EC2 instance with `user_data` rendered from `templates/user_data.sh.tftpl`, an optional Elastic IP, and outputs.
 
 Requirements:
+
 - The SSH rule uses `referenced_security_group_id = var.bastion_security_group_id`. **No CIDR.**
 - `user_data_replace_on_change = true`. Explain in the PR what it does and why we want it.
-- `lifecycle { ignore_changes = [ami] }`. *What would happen to PROD every time AWS publishes a new AMI without this?*
+- `lifecycle { ignore_changes = [ami] }`. _What would happen to PROD every time AWS publishes a new AMI without this?_
 - Wire `module "app_service"` and the outputs (`app_url`, `ssh_command`, …) in both environments.
 
 Deploy DEV:
@@ -232,12 +238,13 @@ curl -s localhost/env.json
 ```
 
 ✅ **Checkpoint 3:**
+
 - `http://<dev-public-ip>` shows the site with a **green `DEV · ca-central-1 · main`** banner
 - SSH to the web server works **only** through `-J` (direct SSH to the web IP times out)
 
 ---
 
-### Phase 4 — The app change flow in DEV (30 min) · *App Developer → Compute owner*
+### Phase 4 — The app change flow in DEV (30 min) · _App Developer → Compute owner_
 
 1. The App Developer merges a visible change on `main` in `static-web-app` (for example a new menu item).
 2. Refresh the DEV site. **The change isn't there.** Discuss why (`user_data` only runs at first boot, and `app_version = "main"` didn't change, so Terraform sees no diff).
@@ -251,7 +258,7 @@ curl -s localhost/env.json
 
 ---
 
-### Phase 5 — First PROD release (45 min) · *App Developer → Release Manager*
+### Phase 5 — First PROD release (45 min) · _App Developer → Release Manager_
 
 1. The App Developer updates `CHANGELOG.md` and tags the release:
    ```bash
@@ -269,24 +276,24 @@ curl -s localhost/env.json
 
 ---
 
-### Phase 6 — Chaos cards 😈 (45 min) · *instructor picks 2–3*
+### Phase 6 — Chaos cards 😈 (45 min) · _instructor picks 2–3_
 
 The instructor hands each team one card at a time. The team must **detect, explain and fix the problem using only Terraform and Git**.
 
-| Card | What the instructor does | What the team must do |
-|---|---|---|
-| 🃏 **A — Drift** | Adds `22/tcp from 0.0.0.0/0` to the DEV `web-sg` in the console | Detect it with `terraform plan`, explain the plan output, remove it with `apply`. Bonus: discuss `terraform plan -refresh-only` |
-| 🃏 **B — Lock fight** | Tells two members to run `apply` on DEV at the same moment | Read the lock error, find who holds the lock, discuss when (if ever) `terraform force-unlock` is OK |
-| 🃏 **C — Bad release** | Asks the App Developer to tag `v1.1.0` with a broken page, and the team ships it to PROD | Roll back with a **revert PR** to `v1.0.0`. Note that the **PROD IP didn't change** (thanks, EIP). Never delete or move the tag |
-| 🃏 **D — Leaked IP** | "A team member's home IP changed" or "an intern left the team" | Update `allowed_ssh_cidrs` through a PR. Observe that only an SG **rule** changes; the bastion is **not** replaced |
-| 🃏 **E — PROD scale-up** | "Black Friday: PROD needs `t3.small`" | Change it **only** in `prod/terraform.tfvars`. Read the plan: is the instance updated **in place** or replaced? Does the EIP survive? |
-| 🃏 **F — Copy-paste trap** | Changes `vpc_cidr` in `prod/terraform.tfvars` to `10.10.0.0/16` | Spot it in the PR review *before* apply. Explain why overlapping CIDRs break future peering |
+| Card                       | What the instructor does                                                                 | What the team must do                                                                                                                 |
+| -------------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| 🃏 **A — Drift**           | Adds `22/tcp from 0.0.0.0/0` to the DEV `web-sg` in the console                          | Detect it with `terraform plan`, explain the plan output, remove it with `apply`. Bonus: discuss `terraform plan -refresh-only`       |
+| 🃏 **B — Lock fight**      | Tells two members to run `apply` on DEV at the same moment                               | Read the lock error, find who holds the lock, discuss when (if ever) `terraform force-unlock` is OK                                   |
+| 🃏 **C — Bad release**     | Asks the App Developer to tag `v1.1.0` with a broken page, and the team ships it to PROD | Roll back with a **revert PR** to `v1.0.0`. Note that the **PROD IP didn't change** (thanks, EIP). Never delete or move the tag       |
+| 🃏 **D — Leaked IP**       | "A team member's home IP changed" or "an intern left the team"                           | Update `allowed_ssh_cidrs` through a PR. Observe that only an SG **rule** changes; the bastion is **not** replaced                    |
+| 🃏 **E — PROD scale-up**   | "Black Friday: PROD needs `t3.small`"                                                    | Change it **only** in `prod/terraform.tfvars`. Read the plan: is the instance updated **in place** or replaced? Does the EIP survive? |
+| 🃏 **F — Copy-paste trap** | Changes `vpc_cidr` in `prod/terraform.tfvars` to `10.10.0.0/16`                          | Spot it in the PR review _before_ apply. Explain why overlapping CIDRs break future peering                                           |
 
 ✅ **Checkpoint 6:** each card is resolved through a PR with its plan and a short explanation in the PR description.
 
 ---
 
-### Phase 7 — Teardown (15 min) · *Release Manager*
+### Phase 7 — Teardown (15 min) · _Release Manager_
 
 ```bash
 cd environments/prod && terraform destroy
@@ -302,45 +309,46 @@ cd ../dev           && terraform destroy
 
 1. Both repos, with a **clean PR history**: at least one PR per phase, each with a plan and an approval
 2. Screenshots: the DEV site (green banner) and the PROD site (red banner), side by side
-3. A short `ANSWERS.md` in the infra repo answering the *italic questions* in this guide
+3. A short `ANSWERS.md` in the infra repo answering the _italic questions_ in this guide
 4. A screenshot of a successful `ssh -J` session, and of a failed direct SSH attempt to the web server
 
 ---
 
 ## 9. Grading rubric (100 pts)
 
-| Criterion | Pts |
-|---|---|
-| Modules work and respect their input/output contracts | 20 |
-| `dev/main.tf` and `prod/main.tf` identical; all differences live in tfvars | 10 |
-| Remote state + locking configured; separate state per environment | 10 |
-| Bastion pattern correct: SSH only from team IPs, web SSH only from bastion SG | 15 |
-| App deployed from the separate repo; DEV on `main`, PROD on a tag | 15 |
-| Git collaboration: PRs, CODEOWNERS respected, plans pasted, reviews meaningful | 15 |
-| Chaos cards resolved correctly and explained | 10 |
-| Clean teardown, no leftover resources | 5 |
+| Criterion                                                                      | Pts |
+| ------------------------------------------------------------------------------ | --- |
+| Modules work and respect their input/output contracts                          | 20  |
+| `dev/main.tf` and `prod/main.tf` identical; all differences live in tfvars     | 10  |
+| Remote state + locking configured; separate state per environment              | 10  |
+| Bastion pattern correct: SSH only from team IPs, web SSH only from bastion SG  | 15  |
+| App deployed from the separate repo; DEV on `main`, PROD on a tag              | 15  |
+| Git collaboration: PRs, CODEOWNERS respected, plans pasted, reviews meaningful | 15  |
+| Chaos cards resolved correctly and explained                                   | 10  |
+| Clean teardown, no leftover resources                                          | 5   |
 
 ---
 
 ## 10. Instructor notes
 
 **Before the lab**
+
 - One shared account: give each team an IAM user or SSO role. Restrict them to `ca-central-1` and `us-east-1` with an SCP or IAM condition (`aws:RequestedRegion`).
 - All names carry `kivubrew-teamXX-<env>` and use `name_prefix`, so 6 teams can share the account without collisions. Watch the default quota of **5 Elastic IPs per region** (one per team in `us-east-1`).
 - Cost: with 4 × `t3.micro` per team plus 1 EIP, a 2-day lab costs a few dollars per team as long as teardown is enforced.
 
 **Common pitfalls (and what they teach)**
 
-| Symptom | Cause | Lesson |
-|---|---|---|
-| Site doesn't load right after apply | `user_data` still running (1–2 min) | `instance running` ≠ `app ready` |
-| Site loads over `https://` → fails | Only port 80 is open, no certificate | Use `http://`. A natural next step is ALB + ACM |
-| `git clone` fails in user-data log | App repo is private, or a wrong tag name | Anonymous HTTPS clone needs a public repo |
-| SSH: `Permission denied (publickey)` | Wrong key for the env, or used `ubuntu@` | AL2023 user is `ec2-user`. Keys are per environment |
-| SSH: timeout | IP not in `allowed_ssh_cidrs` (home IP changed) | SG = silent drop, so you get a timeout, not a refusal |
-| `InvalidKeyPair.NotFound` in PROD | Key pair created in DEV's region | Key pairs, AMIs and SGs are **regional** |
-| `backend` complains about variables | Tried `var.` in `backend.tf` | Backend config is read before variables exist |
-| Plan wants to replace web server unexpectedly | `user_data` changed (even whitespace) | That's `user_data_replace_on_change`, by design |
+| Symptom                                       | Cause                                           | Lesson                                                |
+| --------------------------------------------- | ----------------------------------------------- | ----------------------------------------------------- |
+| Site doesn't load right after apply           | `user_data` still running (1–2 min)             | `instance running` ≠ `app ready`                      |
+| Site loads over `https://` → fails            | Only port 80 is open, no certificate            | Use `http://`. A natural next step is ALB + ACM       |
+| `git clone` fails in user-data log            | App repo is private, or a wrong tag name        | Anonymous HTTPS clone needs a public repo             |
+| SSH: `Permission denied (publickey)`          | Wrong key for the env, or used `ubuntu@`        | AL2023 user is `ec2-user`. Keys are per environment   |
+| SSH: timeout                                  | IP not in `allowed_ssh_cidrs` (home IP changed) | SG = silent drop, so you get a timeout, not a refusal |
+| `InvalidKeyPair.NotFound` in PROD             | Key pair created in DEV's region                | Key pairs, AMIs and SGs are **regional**              |
+| `backend` complains about variables           | Tried `var.` in `backend.tf`                    | Backend config is read before variables exist         |
+| Plan wants to replace web server unexpectedly | `user_data` changed (even whitespace)           | That's `user_data_replace_on_change`, by design       |
 
 ---
 

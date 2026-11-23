@@ -58,6 +58,8 @@ Il n'y a pas encore de nom de domaine. Clients et testeurs utilisent l'**adresse
                  └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
+![AWS Architecture Diagram](../Labs-Terraform_Cloud/kivubrew/img/aws-arch.jpeg)
+
 ### Matrice des environnements
 
 | Paramètre | DEV | PROD | Pourquoi ils diffèrent |
